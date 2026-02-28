@@ -1,0 +1,149 @@
+:root {
+  --paper: #f8f4ea;
+  --ink: #2c3a3a;
+  --card: rgba(252, 247, 236, 0.68);
+  --card-border: rgba(65, 89, 84, 0.25);
+  --button-bg: rgba(88, 123, 114, 0.85);
+  --button-hover: rgba(73, 104, 96, 0.9);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Georgia", "Palatino Linotype", "Times New Roman", serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 8% 12%, #fff4dd 0%, transparent 38%),
+    radial-gradient(circle at 88% 20%, #d8ebe5 0%, transparent 44%),
+    radial-gradient(circle at 40% 80%, #e8deda 0%, transparent 34%),
+    #ece8dc;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.app {
+  width: min(980px, 100%);
+}
+
+.hud-top {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.hud-top h1 {
+  margin: 0;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.5rem, 2.6vw, 2.1rem);
+  font-weight: 600;
+}
+
+.hud-top p {
+  margin: 0.25rem 0 0;
+  opacity: 0.75;
+}
+
+.game-wrap {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid rgba(66, 91, 84, 0.35);
+  box-shadow: 0 16px 40px rgba(33, 45, 42, 0.2);
+}
+
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: linear-gradient(180deg, #d2e8ee 0%, #c6ded1 45%, #b2d0ba 100%);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.75rem;
+  text-align: center;
+  background: linear-gradient(150deg, rgba(247, 240, 226, 0.82), rgba(225, 236, 228, 0.65));
+  backdrop-filter: blur(1.8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.overlay h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 3.5vw, 2.2rem);
+  letter-spacing: 0.05em;
+}
+
+.overlay p {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+button {
+  justify-self: center;
+  font: inherit;
+  font-size: 1rem;
+  border: 0;
+  color: #f5efe4;
+  background: var(--button-bg);
+  padding: 0.58rem 1.15rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+button:hover {
+  background: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+.score-card {
+  position: absolute;
+  top: 0.8rem;
+  left: 0.8rem;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 0.4rem 0.75rem 0.45rem;
+  display: grid;
+  line-height: 1;
+}
+
+.score-card span {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+  letter-spacing: 0.08em;
+}
+
+.score-card strong {
+  font-size: 1.45rem;
+}
+
+@media (max-width: 700px) {
+  body {
+    padding: 0.5rem;
+  }
+
+  .score-card {
+    top: 0.5rem;
+    left: 0.5rem;
+  }
+}
