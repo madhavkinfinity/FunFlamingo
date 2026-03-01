@@ -2,16 +2,19 @@
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
 
+  const splash = document.getElementById("splash");
+  const splashStartBtn = document.getElementById("splashStartBtn");
   const menu = document.getElementById("menu");
   const gameover = document.getElementById("gameover");
   const startBtn = document.getElementById("startBtn");
   const restartBtn = document.getElementById("restartBtn");
+  const fullscreenBtn = document.getElementById("fullscreenBtn");
   const scoreEl = document.getElementById("score");
   const finalScoreEl = document.getElementById("finalScore");
   const bestScoreEl = document.getElementById("bestScore");
 
-  const W = canvas.width;
-  const H = canvas.height;
+  const W = 900;
+  const H = 600;
   const GROUND_H = 84;
 
   const STORAGE_KEY = "watercolor_flappy_best";
@@ -61,6 +64,21 @@
   const paperLayer = createPaperTexture(W, H);
   const bloomLayer = createBloomLayer(W, H);
   const bgLayer = createBackgroundLayer(W, H);
+  const viewport = {
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  };
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    viewport.scale = Math.min(canvas.width / W, canvas.height / H);
+    viewport.offsetX = (canvas.width - W * viewport.scale) * 0.5;
+    viewport.offsetY = (canvas.height - H * viewport.scale) * 0.5;
+  }
 
   function rand(min, max) {
     return Math.random() * (max - min) + min;
@@ -582,6 +600,13 @@
     gameover.classList.remove("visible");
   }
 
+  function startFromSplash() {
+    splash.classList.remove("visible");
+    resumeAudio();
+    resetGame();
+    flap();
+  }
+
   function setGameOver() {
     state.mode = "gameover";
     playHitSound();
@@ -995,7 +1020,11 @@
   }
 
   function render() {
-    ctx.clearRect(0, 0, W, H);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#d5e5de";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(viewport.scale, 0, 0, viewport.scale, viewport.offsetX, viewport.offsetY);
 
     drawBackground();
     drawCurrentFields();
@@ -1030,8 +1059,14 @@
 
   function onInteract(ev) {
     ev.preventDefault();
+    if (splash.classList.contains("visible")) {
+      startFromSplash();
+      return;
+    }
     flap();
   }
+
+  splashStartBtn.addEventListener("click", startFromSplash);
 
   startBtn.addEventListener("click", () => {
     resumeAudio();
@@ -1047,12 +1082,47 @@
   window.addEventListener("keydown", (ev) => {
     if (ev.code === "Space" || ev.code === "ArrowUp") {
       ev.preventDefault();
+      if (splash.classList.contains("visible")) {
+        startFromSplash();
+        return;
+      }
       flap();
     }
   });
 
   canvas.addEventListener("pointerdown", onInteract, { passive: false });
 
+  function toggleFullscreen() {
+    const root = document.querySelector(".game-wrap");
+    if (!document.fullscreenElement) {
+      if (root && root.requestFullscreen) {
+        root.requestFullscreen().catch(() => {});
+      }
+      return;
+    }
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  function syncFullscreenButton() {
+    if (!fullscreenBtn) {
+      return;
+    }
+    fullscreenBtn.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
+  }
+
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
+    syncFullscreenButton();
+  }
+  document.addEventListener("fullscreenchange", syncFullscreenButton);
+  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("orientationchange", () => {
+    setTimeout(resizeCanvas, 80);
+  });
+
   bestScoreEl.textContent = `Best: ${state.best}`;
+  resizeCanvas();
   requestAnimationFrame(tick);
 })();

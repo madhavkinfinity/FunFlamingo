@@ -2,21 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Brushflight: Pond Reverie</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Fun Flamingo</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app">
       <header class="hud-top">
-        <h1>Brushflight: Pond Reverie</h1>
+        <h1>Fun Flamingo</h1>
         <p>Tap, click, or press Space to flap</p>
       </header>
 
       <section class="game-wrap" aria-label="Game area">
-        <canvas id="game" width="900" height="600" aria-label="Watercolor bird game"></canvas>
+        <canvas id="game" width="900" height="600" aria-label="Fun Flamingo game canvas"></canvas>
 
-        <div id="menu" class="overlay visible" role="dialog" aria-live="polite">
+        <div id="splash" class="overlay splash visible" role="dialog" aria-live="polite">
+          <h2>Fun Flamingo</h2>
+          <p>Float through painted currents in a Monet-inspired pond.</p>
+          <button id="splashStartBtn" type="button">Tap To Start</button>
+        </div>
+
+        <div id="menu" class="overlay" role="dialog" aria-live="polite">
           <h2>Flamingo In The Current</h2>
           <p>Ride watercolor fields and thread painted reeds.</p>
           <button id="startBtn" type="button">Start</button>
@@ -33,6 +39,8 @@
           <span>Score</span>
           <strong id="score">0</strong>
         </div>
+
+        <button id="fullscreenBtn" class="fullscreen-btn" type="button" aria-label="Toggle fullscreen">Fullscreen</button>
       </section>
     </main>
 
