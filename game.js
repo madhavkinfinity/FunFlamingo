@@ -25,26 +25,37 @@
       x: W * 0.28,
       y: H * 0.42,
       r: 15,
+      vx: 0,
       vy: 0,
       rot: 0,
+      wingPulse: 0,
+      wingOpen: 0,
     },
     pipes: [],
     pipeTimer: 0,
     camX: 0,
+    ripples: [],
+    rippleTimer: 0,
+    lilyPads: createLilyPads(16),
+    currentFields: createCurrentFields(),
   };
 
   const physics = {
     gravity: 980,
-    flapImpulse: -320,
+    flapImpulse: -370,
     scrollSpeed: 185,
     pipeGap: 180,
     pipeW: 90,
     spawnEvery: 1.22,
+    birdBaseX: W * 0.28,
+    birdMinX: W * 0.2,
+    birdMaxX: W * 0.39,
   };
 
   let audioCtx = null;
   let masterGain = null;
   let ambientNodes = null;
+  let musicNodes = null;
 
   const watercolorLayer = createWatercolorLayer(W, H);
   const paperLayer = createPaperTexture(W, H);
@@ -58,6 +69,45 @@
   function noise2D(x, y, seed) {
     const v = Math.sin(x * 12.9898 + y * 78.233 + seed * 31.415) * 43758.5453123;
     return v - Math.floor(v);
+  }
+
+  function wrap(value, range) {
+    return ((value % range) + range) % range;
+  }
+
+  function createLilyPads(count) {
+    const pads = [];
+    for (let i = 0; i < count; i += 1) {
+      pads.push({
+        worldX: rand(0, W * 2),
+        y: rand(H * 0.66, H - GROUND_H - 14),
+        size: rand(16, 34),
+        phase: rand(0, Math.PI * 2),
+        rot: rand(-0.3, 0.3),
+        rotSpeed: rand(-0.15, 0.15),
+        hue: rand(95, 132),
+      });
+    }
+    return pads;
+  }
+
+  function createCurrentFields() {
+    const fields = [];
+    let nextX = W + 170;
+    for (let i = 0; i < 5; i += 1) {
+      fields.push({
+        x: nextX,
+        y: rand(H * 0.2, H * 0.58),
+        rx: rand(90, 140),
+        ry: rand(65, 110),
+        pushX: rand(-1, 1) * rand(0.25, 0.65),
+        pushY: rand(-1, 1) * rand(0.35, 0.85),
+        hue: rand(182, 214),
+        phase: rand(0, Math.PI * 2),
+      });
+      nextX += rand(260, 400);
+    }
+    return fields;
   }
 
   function createPaperTexture(width, height) {
@@ -179,6 +229,7 @@
     masterGain.connect(audioCtx.destination);
 
     ambientNodes = createAmbientLoop(audioCtx, masterGain);
+    musicNodes = createSoothingMusicLoop(audioCtx, masterGain);
   }
 
   function resumeAudio() {
@@ -230,6 +281,143 @@
     lfo.start();
 
     return { source, filter, gain, lfo, lfoGain };
+  }
+
+  function hzFromSemitone(semitoneOffset) {
+    return 220 * Math.pow(2, semitoneOffset / 12);
+  }
+
+  function playMusicNote(ctx, dest, frequency, now, duration, peakGain) {
+    const voice = ctx.createGain();
+    const bodyFilter = ctx.createBiquadFilter();
+    bodyFilter.type = "lowpass";
+    bodyFilter.frequency.setValueAtTime(2500, now);
+    bodyFilter.frequency.exponentialRampToValueAtTime(1200, now + duration * 0.8);
+    bodyFilter.Q.value = 0.7;
+
+    const env = ctx.createGain();
+    scheduleEnvelope(env.gain, now, [
+      [0.0001, 0],
+      [peakGain, 0.02],
+      [peakGain * 0.58, 0.11],
+      [0.0001, duration],
+    ]);
+
+    // Piano-ish harmonic stack: strong fundamental, softer overtones.
+    const partials = [
+      { ratio: 1, gain: 0.74, type: "triangle" },
+      { ratio: 2, gain: 0.2, type: "sine" },
+      { ratio: 3, gain: 0.1, type: "sine" },
+      { ratio: 4, gain: 0.05, type: "sine" },
+    ];
+
+    for (const partial of partials) {
+      const osc = ctx.createOscillator();
+      const partialGain = ctx.createGain();
+      osc.type = partial.type;
+      osc.frequency.setValueAtTime(frequency * partial.ratio, now);
+      osc.detune.value = (Math.random() - 0.5) * 6;
+      partialGain.gain.value = partial.gain;
+      osc.connect(partialGain);
+      partialGain.connect(voice);
+      osc.start(now);
+      osc.stop(now + duration + 0.05);
+    }
+
+    // Very soft hammer transient.
+    const hammerNoise = ctx.createBufferSource();
+    hammerNoise.buffer = createNoiseBuffer(ctx, 0.05);
+    const hammerFilter = ctx.createBiquadFilter();
+    hammerFilter.type = "highpass";
+    hammerFilter.frequency.value = 1600;
+    const hammerGain = ctx.createGain();
+    scheduleEnvelope(hammerGain.gain, now, [
+      [0.0001, 0],
+      [peakGain * 0.16, 0.005],
+      [0.0001, 0.045],
+    ]);
+    hammerNoise.connect(hammerFilter);
+    hammerFilter.connect(hammerGain);
+    hammerGain.connect(voice);
+    hammerNoise.start(now);
+    hammerNoise.stop(now + 0.05);
+
+    voice.connect(bodyFilter);
+    bodyFilter.connect(env);
+    env.connect(dest);
+  }
+
+  function createSoothingMusicLoop(ctx, dest) {
+    const musicGain = ctx.createGain();
+    musicGain.gain.value = 0.24;
+    musicGain.connect(dest);
+
+    const room = ctx.createBiquadFilter();
+    room.type = "lowpass";
+    room.frequency.value = 2100;
+    room.Q.value = 0.6;
+    room.connect(musicGain);
+
+    const roomLfo = ctx.createOscillator();
+    roomLfo.type = "sine";
+    roomLfo.frequency.value = 0.05;
+    const roomLfoGain = ctx.createGain();
+    roomLfoGain.gain.value = 120;
+    roomLfo.connect(roomLfoGain);
+    roomLfoGain.connect(room.frequency);
+    roomLfo.start();
+
+    // Gentle major-leaning progression for a soothing piano tune.
+    const progression = [
+      [0, 4, 7],
+      [2, 5, 9],
+      [4, 7, 11],
+      [5, 9, 12],
+    ];
+    const melody = [12, 14, 16, 19, 16, 14, 12, 11];
+    const bassPattern = [0, 0, 7, 7, 4, 4, 7, 7];
+    let chordIndex = 0;
+    let melodyIndex = 0;
+    let bassIndex = 0;
+    let nextTime = ctx.currentTime + 0.25;
+    let beatStep = 0;
+
+    const scheduler = window.setInterval(() => {
+      while (nextTime < ctx.currentTime + 0.8) {
+        const chord = progression[chordIndex];
+        const root = hzFromSemitone(chord[0]);
+
+        if (beatStep % 2 === 0) {
+          // Left hand bass note.
+          const bassOffset = bassPattern[bassIndex % bassPattern.length] - 12;
+          playMusicNote(ctx, room, hzFromSemitone(chord[0] + bassOffset), nextTime, 1.55, 0.028);
+          bassIndex += 1;
+        }
+
+        // Right hand broken chord plus melody.
+        playMusicNote(ctx, room, root, nextTime + 0.08, 1.0, 0.014);
+        playMusicNote(ctx, room, hzFromSemitone(chord[1]), nextTime + 0.22, 0.95, 0.012);
+        playMusicNote(ctx, room, hzFromSemitone(chord[2]), nextTime + 0.36, 0.9, 0.01);
+
+        const melodyPitch = chord[0] + (melody[melodyIndex] - 5);
+        playMusicNote(ctx, room, hzFromSemitone(melodyPitch), nextTime + 0.48, 1.05, 0.013);
+
+        beatStep += 1;
+        melodyIndex = (melodyIndex + 1) % melody.length;
+        if (beatStep % 2 === 0) {
+          chordIndex = (chordIndex + 1) % progression.length;
+        }
+        nextTime += 0.8;
+      }
+    }, 260);
+
+    return {
+      musicGain,
+      room,
+      roomLfo,
+      roomLfoGain,
+      scheduler,
+    };
   }
 
   function scheduleEnvelope(param, now, points) {
@@ -381,8 +569,12 @@
     state.pipes.length = 0;
     state.pipeTimer = 0;
     state.bird.y = H * 0.42;
+    state.bird.x = physics.birdBaseX;
+    state.bird.vx = 0;
     state.bird.vy = 0;
     state.bird.rot = -0.08;
+    state.bird.wingPulse = 0;
+    state.bird.wingOpen = 0.2;
     state.camX = 0;
     scoreEl.textContent = "0";
 
@@ -417,7 +609,9 @@
     }
 
     state.bird.vy = physics.flapImpulse;
-    state.bird.rot = -0.42;
+    state.bird.wingPulse = 1;
+    state.bird.wingOpen = Math.max(state.bird.wingOpen, 0.64);
+    state.bird.rot = -0.46;
     playFlapSound();
   }
 
@@ -437,6 +631,30 @@
 
   function update(dt) {
     state.time += dt;
+    state.rippleTimer += dt;
+
+    if (state.rippleTimer > 0.55) {
+      state.rippleTimer = 0;
+      const rippleY = rand(H * 0.68, H - GROUND_H - 10);
+      state.ripples.push({
+        x: rand(24, W - 24),
+        y: rippleY,
+        r: rand(6, 14),
+        age: 0,
+        life: rand(2.2, 3.5),
+        drift: rand(-10, 10),
+      });
+    }
+
+    for (let i = state.ripples.length - 1; i >= 0; i -= 1) {
+      const ripple = state.ripples[i];
+      ripple.age += dt;
+      ripple.r += dt * 26;
+      ripple.x += ripple.drift * dt;
+      if (ripple.age > ripple.life) {
+        state.ripples.splice(i, 1);
+      }
+    }
 
     if (state.mode !== "playing") {
       return;
@@ -445,9 +663,41 @@
     state.camX += physics.scrollSpeed * dt;
 
     const bird = state.bird;
+    bird.wingPulse = Math.max(0, bird.wingPulse - dt * 2.9);
+    bird.wingOpen += (0.14 - bird.wingOpen) * 0.12;
+    bird.wingOpen *= 0.985;
+    bird.vx += (physics.birdBaseX - bird.x) * dt * 6.5;
+
+    for (const field of state.currentFields) {
+      field.x -= physics.scrollSpeed * dt;
+      if (field.x < -field.rx - 40) {
+        const farthestX = Math.max(...state.currentFields.map((f) => f.x));
+        field.x = farthestX + rand(240, 410);
+        field.y = rand(H * 0.2, H * 0.58);
+        field.rx = rand(90, 140);
+        field.ry = rand(65, 110);
+        field.pushX = rand(-1, 1) * rand(0.25, 0.65);
+        field.pushY = rand(-1, 1) * rand(0.35, 0.85);
+        field.phase = rand(0, Math.PI * 2);
+      }
+
+      const nx = (bird.x - field.x) / field.rx;
+      const ny = (bird.y - field.y) / field.ry;
+      const d2 = nx * nx + ny * ny;
+      if (d2 < 1) {
+        const influence = 1 - d2;
+        bird.vx += field.pushX * influence * dt * 210;
+        bird.vy += field.pushY * influence * dt * 260;
+        bird.wingOpen = Math.min(1, bird.wingOpen + influence * 0.02);
+      }
+    }
+
+    bird.vx *= 0.92;
+    bird.x += bird.vx * dt;
+    bird.x = Math.max(physics.birdMinX, Math.min(physics.birdMaxX, bird.x));
     bird.vy += physics.gravity * dt;
     bird.y += bird.vy * dt;
-    bird.rot += (Math.min(1.15, bird.vy / 460) - bird.rot) * 0.12;
+    bird.rot += (Math.min(1.05, bird.vy / 470 + bird.vx / 260) - bird.rot) * 0.12;
 
     state.pipeTimer += dt;
     if (state.pipeTimer >= physics.spawnEvery) {
@@ -525,33 +775,66 @@
 
   function drawBird() {
     const b = state.bird;
+    const wingSpread = 0.35 + b.wingOpen * 0.75 + Math.sin(state.time * 8.5) * 0.06 * b.wingPulse;
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.rot);
 
+    // Flamingo body wash.
     for (let i = 0; i < 5; i += 1) {
       ctx.beginPath();
-      ctx.ellipse(rand(-2, 2), rand(-1.5, 1.5), b.r + rand(-1.8, 2.4), b.r * 0.78 + rand(-1.6, 1.8), rand(-0.2, 0.2), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(231, 165, 101, ${0.13 + i * 0.03})`;
+      ctx.ellipse(rand(-2, 2), rand(-1.5, 1.5), b.r + rand(-1.8, 2.4), b.r * 0.74 + rand(-1.6, 1.8), rand(-0.2, 0.2), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(240, 153, 176, ${0.13 + i * 0.03})`;
       ctx.fill();
     }
 
+    // Wing opens wider when flapping/charging.
+    ctx.save();
+    ctx.translate(-2, -2);
+    ctx.rotate(-0.22 - wingSpread * 0.28);
     ctx.beginPath();
-    ctx.ellipse(3, 0, b.r * 0.62, b.r * 0.45, -0.18, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(197, 127, 78, 0.28)";
+    ctx.ellipse(-8, 2, b.r * (0.72 + wingSpread * 0.24), b.r * (0.44 + wingSpread * 0.18), -0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(228, 126, 156, 0.62)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-6, 2, b.r * 0.5, b.r * 0.28, -0.35, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(245, 178, 198, 0.45)";
+    ctx.fill();
+    ctx.restore();
+
+    // Neck + head.
+    ctx.strokeStyle = "rgba(232, 133, 163, 0.78)";
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(4, -6);
+    ctx.quadraticCurveTo(12, -20, 16, -7);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(16, -7, 5.2, 4.6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(245, 170, 191, 0.9)";
     ctx.fill();
 
     ctx.beginPath();
-    ctx.ellipse(8, -2, 2.7, 2.7, 0, 0, Math.PI * 2);
+    ctx.ellipse(17, -8, 1.4, 1.4, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(44, 38, 34, 0.84)";
     ctx.fill();
 
+    // Flamingo beak with dark tip.
     ctx.beginPath();
-    ctx.moveTo(11, 3);
-    ctx.lineTo(22, 6);
-    ctx.lineTo(11, 9);
+    ctx.moveTo(20, -6);
+    ctx.lineTo(30, -4.5);
+    ctx.lineTo(22, -2.5);
     ctx.closePath();
-    ctx.fillStyle = "rgba(221, 152, 72, 0.8)";
+    ctx.fillStyle = "rgba(245, 224, 166, 0.84)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(24, -4.9);
+    ctx.lineTo(30, -4.4);
+    ctx.lineTo(25.5, -3.2);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(36, 34, 34, 0.84)";
     ctx.fill();
 
     ctx.restore();
@@ -574,10 +857,121 @@
     }
   }
 
+  function drawWaterSurface() {
+    const waterTop = H * 0.61;
+    const waterH = H - GROUND_H - waterTop;
+
+    const waterGrad = ctx.createLinearGradient(0, waterTop, 0, waterTop + waterH);
+    waterGrad.addColorStop(0, "rgba(159, 191, 181, 0.2)");
+    waterGrad.addColorStop(1, "rgba(114, 151, 132, 0.28)");
+    ctx.fillStyle = waterGrad;
+    ctx.fillRect(0, waterTop, W, waterH);
+
+    ctx.strokeStyle = "rgba(223, 239, 230, 0.28)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 14) {
+      const y = waterTop + Math.sin(x * 0.03 + state.time * 1.1) * 3;
+      if (x === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+  }
+
+  function drawRipples() {
+    for (const ripple of state.ripples) {
+      const lifeRatio = 1 - ripple.age / ripple.life;
+      if (lifeRatio <= 0) {
+        continue;
+      }
+      const alpha = 0.22 * lifeRatio;
+      ctx.strokeStyle = `rgba(236, 248, 242, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 1.5 * lifeRatio + 0.4;
+      ctx.beginPath();
+      ctx.ellipse(ripple.x, ripple.y, ripple.r, ripple.r * 0.48, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(150, 184, 170, ${(alpha * 0.75).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(ripple.x, ripple.y, ripple.r * 0.7, ripple.r * 0.28, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function drawLilyPads() {
+    for (const pad of state.lilyPads) {
+      const x = wrap(pad.worldX - state.camX * 0.32, W + 140) - 70;
+      const y = pad.y + Math.sin(state.time * 1.05 + pad.phase) * 4.5;
+      const rot = pad.rot + Math.sin(state.time * 0.9 + pad.phase) * 0.12 + pad.rotSpeed * 0.16;
+      const size = pad.size + Math.sin(state.time * 1.4 + pad.phase) * 1.3;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+
+      for (let i = 0; i < 4; i += 1) {
+        ctx.beginPath();
+        ctx.ellipse(rand(-1.2, 1.2), rand(-1.2, 1.2), size * rand(0.82, 1.12), size * rand(0.58, 0.84), rand(-0.35, 0.35), 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${pad.hue}, 35%, ${38 + i * 3}%, ${0.11 + i * 0.02})`;
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = "rgba(210, 233, 220, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(size * 0.7, -size * 0.06);
+      ctx.stroke();
+
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(size * 0.45, -size * 0.2);
+      ctx.lineTo(size * 0.18, size * 0.16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+
+      ctx.restore();
+    }
+  }
+
   function drawBackground() {
     const scroll = (state.camX * 0.23) % W;
     ctx.drawImage(bgLayer, -scroll, 0);
     ctx.drawImage(bgLayer, W - scroll, 0);
+  }
+
+  function drawCurrentFields() {
+    for (const field of state.currentFields) {
+      const swirl = Math.sin(state.time * 1.2 + field.phase);
+      const alpha = 0.13 + (swirl + 1) * 0.03;
+
+      ctx.save();
+      ctx.translate(field.x, field.y);
+      ctx.rotate(swirl * 0.2);
+
+      ctx.fillStyle = `hsla(${field.hue}, 46%, 76%, ${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, field.rx, field.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(224, 246, 239, ${(alpha * 1.35).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, field.rx * 0.78, field.ry * 0.64, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-field.rx * 0.45, 0);
+      ctx.quadraticCurveTo(-field.rx * 0.1, -field.ry * 0.3, field.rx * 0.36, field.ry * -field.pushY * 0.28);
+      ctx.stroke();
+
+      ctx.restore();
+    }
   }
 
   function drawWatercolorPost() {
@@ -604,6 +998,10 @@
     ctx.clearRect(0, 0, W, H);
 
     drawBackground();
+    drawCurrentFields();
+    drawWaterSurface();
+    drawRipples();
+    drawLilyPads();
 
     for (const pipe of state.pipes) {
       drawPaintedPipe(pipe, true);
@@ -654,7 +1052,6 @@
   });
 
   canvas.addEventListener("pointerdown", onInteract, { passive: false });
-  canvas.addEventListener("touchstart", onInteract, { passive: false });
 
   bestScoreEl.textContent = `Best: ${state.best}`;
   requestAnimationFrame(tick);
