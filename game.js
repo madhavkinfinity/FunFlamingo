@@ -13,9 +13,9 @@
   const finalScoreEl = document.getElementById("finalScore");
   const bestScoreEl = document.getElementById("bestScore");
 
-  const W = 900;
-  const H = 600;
-  const GROUND_H = 84;
+  let W = window.innerHeight > window.innerWidth ? 600 : 900;
+  let H = window.innerHeight > window.innerWidth ? 900 : 600;
+  let GROUND_H = Math.round(H * 0.14);
 
   const STORAGE_KEY = "watercolor_flappy_best";
 
@@ -60,17 +60,61 @@
   let ambientNodes = null;
   let musicNodes = null;
 
-  const watercolorLayer = createWatercolorLayer(W, H);
-  const paperLayer = createPaperTexture(W, H);
-  const bloomLayer = createBloomLayer(W, H);
-  const bgLayer = createBackgroundLayer(W, H);
+  let watercolorLayer = createWatercolorLayer(W, H);
+  let paperLayer = createPaperTexture(W, H);
+  let bloomLayer = createBloomLayer(W, H);
+  let bgLayer = createBackgroundLayer(W, H);
   const viewport = {
     scale: 1,
     offsetX: 0,
     offsetY: 0,
   };
 
+  function syncWorldTuning() {
+    const portraitWorld = H > W;
+    physics.pipeGap = portraitWorld ? 210 : 180;
+    physics.pipeW = portraitWorld ? 98 : 90;
+    physics.birdBaseX = W * 0.28;
+    physics.birdMinX = W * 0.2;
+    physics.birdMaxX = W * 0.39;
+  }
+
+  function rebuildPaintLayers() {
+    watercolorLayer = createWatercolorLayer(W, H);
+    paperLayer = createPaperTexture(W, H);
+    bloomLayer = createBloomLayer(W, H);
+    bgLayer = createBackgroundLayer(W, H);
+  }
+
+  function applyWorldOrientationIfNeeded() {
+    const portrait = window.innerHeight > window.innerWidth;
+    const nextW = portrait ? 600 : 900;
+    const nextH = portrait ? 900 : 600;
+    if (nextW === W && nextH === H) {
+      return;
+    }
+
+    W = nextW;
+    H = nextH;
+    GROUND_H = Math.round(H * 0.14);
+    syncWorldTuning();
+    rebuildPaintLayers();
+
+    state.bird.x = physics.birdBaseX;
+    state.bird.y = H * 0.42;
+    state.bird.vx = 0;
+    state.bird.vy = 0;
+    state.bird.rot = -0.08;
+
+    state.pipes.length = 0;
+    state.pipeTimer = 0;
+    state.ripples.length = 0;
+    state.lilyPads = createLilyPads(16);
+    state.currentFields = createCurrentFields();
+  }
+
   function resizeCanvas() {
+    applyWorldOrientationIfNeeded();
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.max(1, Math.round(rect.width * dpr));
@@ -1122,6 +1166,7 @@
     setTimeout(resizeCanvas, 80);
   });
 
+  syncWorldTuning();
   bestScoreEl.textContent = `Best: ${state.best}`;
   resizeCanvas();
   requestAnimationFrame(tick);
