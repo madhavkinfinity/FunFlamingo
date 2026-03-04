@@ -61,8 +61,6 @@
     },
     pipes: [],
     lastPipeGapY: null,
-    trendShift: 0,
-    trendSteps: 0,
     pipeTimer: 0,
     pipeCount: 0,
     camX: 0,
@@ -91,7 +89,6 @@
   let audioCtx = null;
   let masterGain = null;
   let ambientNodes = null;
-  let musicNodes = null;
 
   let watercolorLayer = createWatercolorLayer(W, H);
   let paperLayer = createPaperTexture(W, H);
@@ -356,7 +353,6 @@
     masterGain.connect(audioCtx.destination);
 
     ambientNodes = createAmbientLoop(audioCtx, masterGain);
-    musicNodes = createRetroMusicLoop(audioCtx, masterGain);
   }
 
   function resumeAudio() {
@@ -408,184 +404,6 @@
     lfo.start();
 
     return { source, filter, gain, lfo, lfoGain };
-  }
-
-  function hzFromSemitone(semitoneOffset) {
-    return 220 * Math.pow(2, semitoneOffset / 12);
-  }
-
-  function playMusicNote(ctx, dest, frequency, now, duration, peakGain) {
-    const voice = ctx.createGain();
-    const bodyFilter = ctx.createBiquadFilter();
-    bodyFilter.type = "lowpass";
-    bodyFilter.frequency.setValueAtTime(2500, now);
-    bodyFilter.frequency.exponentialRampToValueAtTime(1200, now + duration * 0.8);
-    bodyFilter.Q.value = 0.7;
-
-    const env = ctx.createGain();
-    scheduleEnvelope(env.gain, now, [
-      [0.0001, 0],
-      [peakGain, 0.02],
-      [peakGain * 0.58, 0.11],
-      [0.0001, duration],
-    ]);
-
-    // Piano-ish harmonic stack: strong fundamental, softer overtones.
-    const partials = [
-      { ratio: 1, gain: 0.74, type: "triangle" },
-      { ratio: 2, gain: 0.2, type: "sine" },
-      { ratio: 3, gain: 0.1, type: "sine" },
-      { ratio: 4, gain: 0.05, type: "sine" },
-    ];
-
-    for (const partial of partials) {
-      const osc = ctx.createOscillator();
-      const partialGain = ctx.createGain();
-      osc.type = partial.type;
-      osc.frequency.setValueAtTime(frequency * partial.ratio, now);
-      osc.detune.value = (Math.random() - 0.5) * 6;
-      partialGain.gain.value = partial.gain;
-      osc.connect(partialGain);
-      partialGain.connect(voice);
-      osc.start(now);
-      osc.stop(now + duration + 0.05);
-    }
-
-    // Very soft hammer transient.
-    const hammerNoise = ctx.createBufferSource();
-    hammerNoise.buffer = createNoiseBuffer(ctx, 0.05);
-    const hammerFilter = ctx.createBiquadFilter();
-    hammerFilter.type = "highpass";
-    hammerFilter.frequency.value = 1600;
-    const hammerGain = ctx.createGain();
-    scheduleEnvelope(hammerGain.gain, now, [
-      [0.0001, 0],
-      [peakGain * 0.16, 0.005],
-      [0.0001, 0.045],
-    ]);
-    hammerNoise.connect(hammerFilter);
-    hammerFilter.connect(hammerGain);
-    hammerGain.connect(voice);
-    hammerNoise.start(now);
-    hammerNoise.stop(now + 0.05);
-
-    voice.connect(bodyFilter);
-    bodyFilter.connect(env);
-    env.connect(dest);
-  }
-
-  function playChipNote(ctx, dest, frequency, now, duration, peakGain, type = "square") {
-    const osc = ctx.createOscillator();
-    osc.type = type;
-    osc.frequency.setValueAtTime(frequency, now);
-    osc.detune.setValueAtTime((Math.random() - 0.5) * 4, now);
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(type === "triangle" ? 1600 : 2200, now);
-
-    const amp = ctx.createGain();
-    scheduleEnvelope(amp.gain, now, [
-      [0.0001, 0],
-      [peakGain, 0.01],
-      [peakGain * 0.72, duration * 0.35],
-      [0.0001, duration],
-    ]);
-
-    osc.connect(filter);
-    filter.connect(amp);
-    amp.connect(dest);
-
-    osc.start(now);
-    osc.stop(now + duration + 0.01);
-  }
-
-  function playChipNoise(ctx, dest, now, duration, peakGain, color = 1500) {
-    const noise = ctx.createBufferSource();
-    noise.buffer = createNoiseBuffer(ctx, Math.max(0.05, duration));
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "bandpass";
-    filter.frequency.setValueAtTime(color, now);
-    filter.Q.value = 1.2;
-
-    const amp = ctx.createGain();
-    scheduleEnvelope(amp.gain, now, [
-      [0.0001, 0],
-      [peakGain, 0.004],
-      [0.0001, duration],
-    ]);
-
-    noise.connect(filter);
-    filter.connect(amp);
-    amp.connect(dest);
-
-    noise.start(now);
-    noise.stop(now + duration + 0.02);
-  }
-
-  function createRetroMusicLoop(ctx, dest) {
-    const musicGain = ctx.createGain();
-    musicGain.gain.value = 0.19;
-    musicGain.connect(dest);
-
-    const chipBus = ctx.createBiquadFilter();
-    chipBus.type = "lowpass";
-    chipBus.frequency.value = 2300;
-    chipBus.Q.value = 0.7;
-    chipBus.connect(musicGain);
-
-    const rhythmRoots = [0, 5, 7, 9];
-    const scale = [0, 2, 4, 5, 7, 9, 11, 12];
-    let rootIndex = 0;
-    let bar = 0;
-    let step = 0;
-    let nextTime = ctx.currentTime + 0.2;
-    const stepDur = 60 / 148 / 4;
-
-    const scheduler = window.setInterval(() => {
-      while (nextTime < ctx.currentTime + 0.22) {
-        const root = rhythmRoots[rootIndex];
-
-        if (step % 4 === 0) {
-          playChipNote(ctx, chipBus, hzFromSemitone(root - 12), nextTime, stepDur * 3.6, 0.06, "triangle");
-        }
-
-        if (step % 8 === 0) {
-          playChipNoise(ctx, chipBus, nextTime, 0.07, 0.05, 900);
-        } else if (step % 4 === 0) {
-          playChipNoise(ctx, chipBus, nextTime, 0.05, 0.022, 1700);
-        }
-
-        const melodyChance = step % 2 === 0 ? 0.9 : 0.4;
-        if (Math.random() < melodyChance) {
-          const degree = scale[Math.floor(rand(0, scale.length))];
-          const octave = Math.random() < 0.17 ? 24 : 12;
-          const note = root + degree + octave;
-          const noteDur = step % 4 === 0 ? stepDur * 1.8 : stepDur * 0.95;
-          playChipNote(ctx, chipBus, hzFromSemitone(note), nextTime, noteDur, 0.04, "square");
-          if (Math.random() < 0.28) {
-            playChipNote(ctx, chipBus, hzFromSemitone(note + 7), nextTime + stepDur * 0.15, noteDur * 0.75, 0.018, "square");
-          }
-        }
-
-        step += 1;
-        if (step % 16 === 0) {
-          bar += 1;
-          rootIndex = (rootIndex + 1 + (Math.random() < 0.2 ? 1 : 0)) % rhythmRoots.length;
-          if (bar % 4 === 0 && Math.random() < 0.45) {
-            rootIndex = (rootIndex + 2) % rhythmRoots.length;
-          }
-        }
-        nextTime += stepDur;
-      }
-    }, 90);
-
-    return {
-      musicGain,
-      chipBus,
-      scheduler,
-    };
   }
 
   function scheduleEnvelope(param, now, points) {
@@ -736,8 +554,6 @@
     state.score = 0;
     state.pipes.length = 0;
     state.lastPipeGapY = null;
-    state.trendShift = 0;
-    state.trendSteps = 0;
     state.pipeTimer = 0;
     state.pipeCount = 0;
     state.bird.y = H * 0.42;
@@ -799,30 +615,20 @@
     const topLimit = physics.pipeTopPadding;
     const bottomLimit = H - GROUND_H - physics.pipeBottomPadding;
     const dynamicGap = clamp(physics.pipeGap * (1 - difficulty * 0.2), 132, physics.pipeGap);
-    const maxStep = Math.max(58, dynamicGap * 0.34 + difficulty * 34);
-    let minGapY = topLimit;
-    let maxGapY = bottomLimit;
+    const playableMin = topLimit + dynamicGap * 0.5;
+    const playableMax = bottomLimit - dynamicGap * 0.5;
+    const middle = (playableMin + playableMax) * 0.5;
+    let gapY = rand(playableMin, playableMax);
 
-    if (typeof state.lastPipeGapY === "number") {
-      minGapY = Math.max(topLimit, state.lastPipeGapY - maxStep);
-      maxGapY = Math.min(bottomLimit, state.lastPipeGapY + maxStep);
+    // Original Flappy Bird web behavior relied on largely independent pipe heights.
+    // This keeps abrupt jumps and occasionally forces a hard side switch.
+    if (typeof state.lastPipeGapY === "number" && Math.random() < 0.34) {
+      const previousWasUpper = state.lastPipeGapY < middle;
+      const switchMin = previousWasUpper ? middle : playableMin;
+      const switchMax = previousWasUpper ? playableMax : middle;
+      gapY = rand(switchMin, switchMax);
     }
 
-    if (minGapY > maxGapY) {
-      minGapY = topLimit;
-      maxGapY = bottomLimit;
-    }
-
-    if (state.trendSteps <= 0 && Math.random() < 0.24 + difficulty * 0.3) {
-      const direction = Math.random() < 0.5 ? -1 : 1;
-      state.trendShift = direction * rand(40, 66 + difficulty * 36);
-      state.trendSteps = Math.floor(rand(2, 5));
-    }
-
-    const shift = state.trendSteps > 0 ? state.trendShift + rand(-18, 18) : rand(-maxStep, maxStep);
-    const baseY = typeof state.lastPipeGapY === "number" ? state.lastPipeGapY : rand(minGapY, maxGapY);
-    const gapY = clamp(baseY + shift, minGapY, maxGapY);
-    state.trendSteps = Math.max(0, state.trendSteps - 1);
     state.lastPipeGapY = gapY;
     state.pipeCount += 1;
 
