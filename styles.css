@@ -1,10 +1,10 @@
 :root {
-  --paper: #f8f4ea;
+  --paper: #fff7e7;
   --ink: #2c3a3a;
   --card: rgba(252, 247, 236, 0.7);
   --card-border: rgba(65, 89, 84, 0.24);
-  --button-bg: rgba(88, 123, 114, 0.9);
-  --button-hover: rgba(73, 104, 96, 0.95);
+  --button-bg: rgba(62, 153, 125, 0.92);
+  --button-hover: rgba(47, 132, 107, 0.96);
 }
 
 * {
@@ -32,7 +32,7 @@ body {
     radial-gradient(circle at 8% 12%, #fff4dd 0%, transparent 38%),
     radial-gradient(circle at 88% 20%, #d8ebe5 0%, transparent 44%),
     radial-gradient(circle at 40% 80%, #e8deda 0%, transparent 34%),
-    #ece8dc;
+    #f4efdf;
 }
 
 body.immersive .hud-top {
@@ -81,9 +81,9 @@ body.immersive .app {
   height: 100%;
   border-radius: 16px;
   overflow: hidden;
-  border: 2px solid rgba(66, 91, 84, 0.34);
-  box-shadow: 0 14px 32px rgba(33, 45, 42, 0.18);
-  background: rgba(223, 236, 228, 0.5);
+  border: 2px solid rgba(56, 108, 91, 0.38);
+  box-shadow: 0 14px 32px rgba(25, 69, 53, 0.2);
+  background: rgba(211, 243, 229, 0.6);
 }
 
 canvas {
@@ -91,7 +91,32 @@ canvas {
   height: 100%;
   display: block;
   touch-action: manipulation;
-  background: linear-gradient(180deg, #d2e8ee 0%, #c6ded1 45%, #b2d0ba 100%);
+  background: linear-gradient(180deg, #ccf0ff 0%, #bde7d8 45%, #9cdda8 100%);
+}
+
+.game-wrap:fullscreen,
+.game-wrap:-webkit-full-screen,
+body.immersive .game-wrap {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+body.fullscreen-active .app,
+body:has(.game-wrap:fullscreen) .app,
+body:has(.game-wrap:-webkit-full-screen) .app,
+body.immersive .app {
+  padding: 0;
+  gap: 0;
+}
+
+body.fullscreen-active .hud-top,
+body:has(.game-wrap:fullscreen) .hud-top,
+body:has(.game-wrap:-webkit-full-screen) .hud-top {
+  display: none;
 }
 
 .overlay {

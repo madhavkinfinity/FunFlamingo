@@ -60,6 +60,7 @@
       wingOpen: 0,
     },
     pipes: [],
+    lastPipeGapY: null,
     pipeTimer: 0,
     camX: 0,
     ripples: [],
@@ -118,12 +119,12 @@
     const portraitAspect = H / Math.max(W, 1);
     const landscapeAspect = W / Math.max(H, 1);
 
-    physics.flapImpulse = portraitWorld ? -390 : -372;
+    physics.flapImpulse = portraitWorld ? -360 : -346;
     physics.scrollSpeed = portraitWorld ? 168 : 188;
     physics.spawnEvery = portraitWorld ? 1.42 : 1.28;
     physics.pipeGap = portraitWorld
-      ? Math.round(H * Math.min(0.29, Math.max(0.25, 0.24 + (portraitAspect - 1.7) * 0.05)))
-      : Math.round(H * Math.min(0.34, Math.max(0.29, 0.27 + (landscapeAspect - 1.45) * 0.02)));
+      ? Math.round(H * Math.min(0.33, Math.max(0.29, 0.28 + (portraitAspect - 1.7) * 0.05)))
+      : Math.round(H * Math.min(0.37, Math.max(0.32, 0.3 + (landscapeAspect - 1.45) * 0.02)));
     physics.pipeW = portraitWorld ? 100 : 96;
     physics.pipeTopPadding = portraitWorld ? Math.round(H * 0.12) : Math.round(H * 0.14);
     physics.pipeBottomPadding = portraitWorld ? Math.round(H * 0.18) : Math.round(H * 0.16);
@@ -279,32 +280,32 @@
 
   function createBackgroundLayer(width, height) {
     const c = document.createElement("canvas");
-    c.width = width * 2;
+    c.width = width * 3;
     c.height = height;
     const cctx = c.getContext("2d");
 
     const skyGrad = cctx.createLinearGradient(0, 0, 0, height);
-    skyGrad.addColorStop(0, "#d3e8ec");
-    skyGrad.addColorStop(0.5, "#c8dfd5");
-    skyGrad.addColorStop(1, "#b4cfba");
+    skyGrad.addColorStop(0, "#d2f0f8");
+    skyGrad.addColorStop(0.5, "#bee7da");
+    skyGrad.addColorStop(1, "#a8deb5");
     cctx.fillStyle = skyGrad;
     cctx.fillRect(0, 0, c.width, c.height);
 
     for (let i = 0; i < 24; i += 1) {
       const x = rand(0, c.width);
       const y = rand(height * 0.18, height * 0.55);
-      paintBlob(cctx, x, y, rand(80, 170), rand(25, 55), "rgba(117, 149, 132, ALPHA)", 5);
-      paintBlob(cctx, x + rand(-30, 30), y + rand(-14, 14), rand(60, 140), rand(22, 48), "rgba(151, 176, 155, ALPHA)", 4);
+      paintBlob(cctx, x, y, rand(80, 170), rand(25, 55), "rgba(94, 168, 143, ALPHA)", 5);
+      paintBlob(cctx, x + rand(-30, 30), y + rand(-14, 14), rand(60, 140), rand(22, 48), "rgba(164, 209, 171, ALPHA)", 4);
     }
 
     for (let i = 0; i < 45; i += 1) {
       const x = rand(0, c.width);
       const y = rand(height * 0.67, height - 20);
-      paintBlob(cctx, x, y, rand(40, 90), rand(16, 36), "rgba(100, 133, 100, ALPHA)", 4);
+      paintBlob(cctx, x, y, rand(40, 90), rand(16, 36), "rgba(80, 153, 97, ALPHA)", 4);
     }
 
     cctx.globalCompositeOperation = "multiply";
-    cctx.fillStyle = "rgba(79, 103, 92, 0.2)";
+    cctx.fillStyle = "rgba(58, 121, 92, 0.22)";
     cctx.fillRect(0, height - GROUND_H, c.width, GROUND_H);
     cctx.globalCompositeOperation = "source-over";
 
@@ -686,6 +687,7 @@
     state.mode = "playing";
     state.score = 0;
     state.pipes.length = 0;
+    state.lastPipeGapY = null;
     state.pipeTimer = 0;
     state.bird.y = H * 0.42;
     state.bird.x = physics.birdBaseX;
@@ -744,43 +746,33 @@
   function spawnPipe() {
     const topLimit = physics.pipeTopPadding;
     const bottomLimit = H - GROUND_H - physics.pipeBottomPadding;
-    const gapY = rand(topLimit, bottomLimit);
+    const maxStep = Math.max(56, physics.pipeGap * 0.34);
+    let minGapY = topLimit;
+    let maxGapY = bottomLimit;
+
+    if (typeof state.lastPipeGapY === "number") {
+      minGapY = Math.max(topLimit, state.lastPipeGapY - maxStep);
+      maxGapY = Math.min(bottomLimit, state.lastPipeGapY + maxStep);
+    }
+
+    if (minGapY > maxGapY) {
+      minGapY = topLimit;
+      maxGapY = bottomLimit;
+    }
+
+    const gapY = rand(minGapY, maxGapY);
+    state.lastPipeGapY = gapY;
 
     state.pipes.push({
       x: W + 40,
       gapY,
       passed: false,
-      hue: rand(95, 145),
+      hue: rand(108, 156),
     });
   }
 
   function update(dt) {
     state.time += dt;
-    state.rippleTimer += dt;
-
-    if (state.rippleTimer > 0.55) {
-      state.rippleTimer = 0;
-      const rippleY = rand(H * 0.68, H - GROUND_H - 10);
-      state.ripples.push({
-        x: rand(24, W - 24),
-        y: rippleY,
-        r: rand(6, 14),
-        age: 0,
-        life: rand(2.2, 3.5),
-        drift: rand(-10, 10),
-      });
-    }
-
-    for (let i = state.ripples.length - 1; i >= 0; i -= 1) {
-      const ripple = state.ripples[i];
-      ripple.age += dt;
-      ripple.r += dt * 26;
-      ripple.x += ripple.drift * dt;
-      if (ripple.age > ripple.life) {
-        state.ripples.splice(i, 1);
-      }
-    }
-
     if (state.mode !== "playing") {
       return;
     }
@@ -988,27 +980,7 @@
   }
 
   function drawWaterSurface() {
-    const waterTop = H * 0.61;
-    const waterH = H - GROUND_H - waterTop;
-
-    const waterGrad = ctx.createLinearGradient(0, waterTop, 0, waterTop + waterH);
-    waterGrad.addColorStop(0, "rgba(159, 191, 181, 0.2)");
-    waterGrad.addColorStop(1, "rgba(114, 151, 132, 0.28)");
-    ctx.fillStyle = waterGrad;
-    ctx.fillRect(0, waterTop, W, waterH);
-
-    ctx.strokeStyle = "rgba(223, 239, 230, 0.28)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let x = 0; x <= W; x += 14) {
-      const y = waterTop + Math.sin(x * 0.03 + state.time * 1.1) * 3;
-      if (x === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.stroke();
+    // Bottom puddle removed to keep terrain clean and consistent.
   }
 
   function drawRipples() {
@@ -1070,9 +1042,10 @@
   }
 
   function drawBackground() {
-    const scroll = (state.camX * 0.23) % W;
+    const layerW = bgLayer.width;
+    const scroll = (state.camX * 0.2) % layerW;
     ctx.drawImage(bgLayer, -scroll, 0);
-    ctx.drawImage(bgLayer, W - scroll, 0);
+    ctx.drawImage(bgLayer, layerW - scroll, 0);
   }
 
   function drawCurrentFields() {
@@ -1133,9 +1106,6 @@
 
     drawBackground();
     drawCurrentFields();
-    drawWaterSurface();
-    drawRipples();
-    drawLilyPads();
 
     for (const pipe of state.pipes) {
       drawPaintedPipe(pipe, true);
@@ -1243,15 +1213,15 @@
   }
 
   function syncFullscreenButton() {
+    const activeElement = fullscreenApi.element();
+    const fullscreenActive = Boolean(activeElement || immersiveFallback);
+    document.body.classList.toggle("fullscreen-active", fullscreenActive);
+
     if (!fullscreenBtn) {
       return;
     }
-    const activeElement = fullscreenApi.element();
-    if (activeElement || immersiveFallback) {
-      fullscreenBtn.textContent = "Exit Fullscreen";
-      return;
-    }
-    fullscreenBtn.textContent = "Fullscreen";
+
+    fullscreenBtn.textContent = fullscreenActive ? "Exit Fullscreen" : "Fullscreen";
   }
 
   function registerServiceWorker() {
