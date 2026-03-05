@@ -146,6 +146,55 @@ body:has(.game-wrap:-webkit-full-screen) .hud-top {
     linear-gradient(160deg, rgba(246, 240, 228, 0.94), rgba(212, 229, 220, 0.8));
 }
 
+.title-banner {
+  position: relative;
+  margin: 0 auto 0.15rem;
+  padding: 0.7rem 1.7rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(108, 86, 95, 0.26);
+  background:
+    radial-gradient(circle at 16% 22%, rgba(255, 235, 204, 0.8), transparent 44%),
+    radial-gradient(circle at 84% 76%, rgba(194, 229, 217, 0.72), transparent 50%),
+    linear-gradient(135deg, rgba(254, 244, 220, 0.94), rgba(245, 224, 206, 0.92) 44%, rgba(216, 235, 227, 0.9));
+  box-shadow:
+    0 10px 22px rgba(67, 95, 84, 0.18),
+    inset 0 0 0 2px rgba(255, 247, 228, 0.62);
+}
+
+.title-banner::before,
+.title-banner::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px 11px;
+  background: linear-gradient(140deg, rgba(238, 166, 188, 0.95), rgba(223, 128, 158, 0.9));
+  box-shadow: 0 0 0 2px rgba(158, 106, 123, 0.16);
+}
+
+.title-banner::before {
+  left: -10px;
+  transform: translateY(-50%) rotate(-16deg);
+}
+
+.title-banner::after {
+  right: -10px;
+  transform: translateY(-50%) scaleX(-1) rotate(-16deg);
+}
+
+.title-banner span {
+  position: relative;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: clamp(1.18rem, 4.7vw, 2.1rem);
+  line-height: 1;
+  font-weight: 700;
+  color: #35594f;
+  text-shadow: 0 2px 0 rgba(255, 249, 237, 0.75);
+}
+
 .splash-mark {
   width: 110px;
   height: 110px;
