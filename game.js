@@ -58,6 +58,7 @@
       rot: 0,
       wingPulse: 0,
       wingOpen: 0,
+      jetTilt: 0,
     },
     pipes: [],
     lastPipeGapY: null,
@@ -68,11 +69,15 @@
     rippleTimer: 0,
     lilyPads: [],
     currentFields: createCurrentFields(),
+    jetTrail: [],
+    thrustBoost: 0,
+    thrustHeld: false,
   };
 
   const physics = {
     gravity: 1060,
     flapImpulse: -420,
+    jetpackThrust: 980,
     scrollSpeed: 210,
     pipeGap: 190,
     pipeW: 94,
@@ -124,8 +129,8 @@
     physics.spawnEvery = portraitWorld ? 1.42 : 1.28;
     physics.pipeGap = portraitWorld
       ? Math.round(H * Math.min(0.33, Math.max(0.29, 0.28 + (portraitAspect - 1.7) * 0.05)))
-      : Math.round(H * Math.min(0.37, Math.max(0.32, 0.3 + (landscapeAspect - 1.45) * 0.02)));
-    physics.pipeW = portraitWorld ? 100 : 96;
+      : Math.round(H * Math.min(0.4, Math.max(0.34, 0.32 + (landscapeAspect - 1.45) * 0.02)));
+    physics.pipeW = portraitWorld ? 132 : 122;
     physics.pipeTopPadding = portraitWorld ? Math.round(H * 0.12) : Math.round(H * 0.14);
     physics.pipeBottomPadding = portraitWorld ? Math.round(H * 0.18) : Math.round(H * 0.16);
     physics.currentForceX = portraitWorld ? 120 : 210;
@@ -282,6 +287,65 @@
     }
   }
 
+  function paintMountainRange(cctx, width, horizonY, peaks, palette, fogStrength) {
+    const profile = [];
+    const step = width / peaks;
+    let x = -step;
+    let y = horizonY;
+    profile.push({ x, y });
+
+    for (let i = 0; i <= peaks + 1; i += 1) {
+      x += step * rand(0.8, 1.18);
+      const ridge = rand(0.2, 1);
+      const peakDrop = Math.pow(ridge, 1.6) * palette.height;
+      y = horizonY - peakDrop + Math.sin(i * 1.25 + rand(-0.25, 0.25)) * palette.roughness;
+      profile.push({ x, y });
+    }
+
+    cctx.beginPath();
+    cctx.moveTo(-80, horizonY + palette.baseLift);
+    for (let i = 0; i < profile.length - 1; i += 1) {
+      const p = profile[i];
+      const n = profile[i + 1];
+      const cx = (p.x + n.x) * 0.5;
+      const cy = (p.y + n.y) * 0.5;
+      cctx.quadraticCurveTo(p.x, p.y, cx, cy);
+    }
+    cctx.lineTo(width + 80, horizonY + palette.baseLift);
+    cctx.closePath();
+
+    const bodyGrad = cctx.createLinearGradient(0, horizonY - palette.height, 0, horizonY + palette.baseLift);
+    bodyGrad.addColorStop(0, palette.top);
+    bodyGrad.addColorStop(0.6, palette.mid);
+    bodyGrad.addColorStop(1, palette.base);
+    cctx.fillStyle = bodyGrad;
+    cctx.fill();
+
+    cctx.save();
+    cctx.globalAlpha = fogStrength;
+    cctx.fillStyle = "rgba(223, 236, 255, 0.4)";
+    for (let i = 0; i < profile.length; i += 1) {
+      const p = profile[i];
+      paintBlob(cctx, p.x, p.y + palette.baseLift * 0.2, step * rand(0.5, 1.2), step * rand(0.12, 0.24), "rgba(220,232,255,ALPHA)", 3);
+    }
+    cctx.restore();
+
+    cctx.save();
+    cctx.globalCompositeOperation = "screen";
+    cctx.strokeStyle = "rgba(244, 249, 255, 0.55)";
+    cctx.lineWidth = 2;
+    cctx.beginPath();
+    for (let i = 1; i < profile.length - 1; i += 1) {
+      const p = profile[i];
+      if (Math.random() < 0.55) {
+        cctx.moveTo(p.x - step * rand(0.16, 0.26), p.y + palette.height * rand(0.03, 0.08));
+        cctx.lineTo(p.x + step * rand(0.12, 0.2), p.y + palette.height * rand(0.14, 0.2));
+      }
+    }
+    cctx.stroke();
+    cctx.restore();
+  }
+
   function createBackgroundLayer(width, height) {
     const c = document.createElement("canvas");
     c.width = width * 3;
@@ -289,37 +353,54 @@
     const cctx = c.getContext("2d");
 
     const skyGrad = cctx.createLinearGradient(0, 0, 0, height);
-    skyGrad.addColorStop(0, "#dff1ff");
-    skyGrad.addColorStop(0.45, "#bfd9fb");
-    skyGrad.addColorStop(1, "#a7c5ec");
+    skyGrad.addColorStop(0, "#f7efe2");
+    skyGrad.addColorStop(0.24, "#f3d7b8");
+    skyGrad.addColorStop(0.52, "#b8cbec");
+    skyGrad.addColorStop(1, "#89abd8");
     cctx.fillStyle = skyGrad;
     cctx.fillRect(0, 0, c.width, c.height);
 
-    for (let i = 0; i < 20; i += 1) {
-      const baseX = rand(0, c.width);
-      const baseY = rand(height * 0.34, height * 0.62);
-      const mountainW = rand(180, 320);
-      const peakH = rand(110, 210);
-
-      cctx.beginPath();
-      cctx.moveTo(baseX - mountainW * 0.5, baseY);
-      cctx.lineTo(baseX, baseY - peakH);
-      cctx.lineTo(baseX + mountainW * 0.5, baseY);
-      cctx.closePath();
-      cctx.fillStyle = "rgba(110, 138, 182, 0.36)";
-      cctx.fill();
-
-      cctx.beginPath();
-      cctx.moveTo(baseX - mountainW * 0.22, baseY - peakH * 0.55);
-      cctx.lineTo(baseX, baseY - peakH);
-      cctx.lineTo(baseX + mountainW * 0.22, baseY - peakH * 0.56);
-      cctx.closePath();
-      cctx.fillStyle = "rgba(241, 248, 255, 0.86)";
-      cctx.fill();
+    for (let i = 0; i < 130; i += 1) {
+      paintBlob(cctx, rand(0, c.width), rand(height * 0.05, height * 0.6), rand(45, 160), rand(18, 74), "rgba(255,232,199,ALPHA)", 2);
     }
 
-    cctx.fillStyle = "rgba(236, 246, 255, 0.65)";
-    cctx.fillRect(0, height - GROUND_H, c.width, GROUND_H);
+    const horizonY = height * 0.64;
+    paintMountainRange(cctx, c.width, horizonY - height * 0.2, 16, {
+      height: height * 0.24,
+      roughness: 18,
+      baseLift: height * 0.18,
+      top: "rgba(214, 224, 243, 0.88)",
+      mid: "rgba(151, 176, 208, 0.9)",
+      base: "rgba(103, 130, 166, 0.95)",
+    }, 0.32);
+    paintMountainRange(cctx, c.width, horizonY - height * 0.08, 22, {
+      height: height * 0.34,
+      roughness: 26,
+      baseLift: height * 0.24,
+      top: "rgba(236, 241, 250, 0.95)",
+      mid: "rgba(126, 158, 194, 0.92)",
+      base: "rgba(83, 112, 151, 0.94)",
+    }, 0.2);
+
+    const waterY = height - GROUND_H;
+    const waterGrad = cctx.createLinearGradient(0, waterY - height * 0.2, 0, height);
+    waterGrad.addColorStop(0, "rgba(208, 227, 248, 0.42)");
+    waterGrad.addColorStop(0.45, "rgba(150, 185, 221, 0.68)");
+    waterGrad.addColorStop(1, "rgba(108, 146, 187, 0.8)");
+    cctx.fillStyle = waterGrad;
+    cctx.fillRect(0, waterY - 2, c.width, GROUND_H + 2);
+
+    cctx.strokeStyle = "rgba(238, 248, 255, 0.26)";
+    for (let i = 0; i < 60; i += 1) {
+      const y = waterY + (i / 60) * GROUND_H;
+      cctx.lineWidth = 1 + (i % 3) * 0.4;
+      cctx.beginPath();
+      cctx.moveTo(0, y);
+      for (let x = 0; x <= c.width; x += 140) {
+        cctx.quadraticCurveTo(x + 70, y + Math.sin(i * 0.6 + x * 0.008) * 2.8, x + 140, y);
+      }
+      cctx.stroke();
+    }
 
     return c;
   }
@@ -564,6 +645,10 @@
     state.bird.rot = -0.08;
     state.bird.wingPulse = 0;
     state.bird.wingOpen = 0.2;
+    state.bird.jetTilt = 0;
+    state.jetTrail.length = 0;
+    state.thrustBoost = 0;
+    state.thrustHeld = false;
     state.camX = 0;
     scoreEl.textContent = "0";
 
@@ -604,10 +689,10 @@
       return;
     }
 
-    state.bird.vy = Math.min(state.bird.vy - 90, physics.flapImpulse);
-    state.bird.wingPulse = 1;
-    state.bird.wingOpen = Math.max(state.bird.wingOpen, 0.64);
-    state.bird.rot = -0.46;
+    state.bird.vy = Math.min(state.bird.vy - physics.jetpackThrust * 0.28, physics.flapImpulse);
+    state.thrustBoost = 1;
+    state.thrustHeld = true;
+    state.bird.jetTilt = -0.42;
     playFlapSound();
   }
 
@@ -633,12 +718,15 @@
     state.lastPipeGapY = gapY;
     state.pipeCount += 1;
 
+    const w = physics.pipeW * rand(0.92, 1.16);
     state.pipes.push({
       x: W + 40,
+      w,
       gapY,
-      gap: dynamicGap,
+      gap: dynamicGap * rand(0.94, 1.06),
       passed: false,
       hue: rand(194, 220),
+      frost: rand(0.28, 0.58),
     });
   }
 
@@ -663,10 +751,25 @@
     state.camX += liveScrollSpeed * dt;
 
     const bird = state.bird;
-    bird.wingPulse = Math.max(0, bird.wingPulse - dt * 2.9);
-    bird.wingOpen += (0.14 - bird.wingOpen) * 0.12;
-    bird.wingOpen *= 0.985;
+    state.thrustBoost = Math.max(0, state.thrustBoost - dt * (state.thrustHeld ? 1.35 : 2.35));
+    bird.jetTilt += ((state.thrustBoost > 0.02 ? -0.34 : 0.1) - bird.jetTilt) * 0.16;
     bird.vx += (physics.birdBaseX - bird.x) * dt * 6.5;
+    if (state.thrustBoost > 0) {
+      bird.vy -= physics.jetpackThrust * state.thrustBoost * dt;
+      const burst = Math.floor(7 + state.thrustBoost * 7);
+      for (let i = 0; i < burst; i += 1) {
+        state.jetTrail.push({
+          x: bird.x - 12 + rand(-3, 3),
+          y: bird.y + rand(-2, 2),
+          vx: -rand(110, 220),
+          vy: rand(-44, 44),
+          life: rand(0.18, 0.42),
+          age: 0,
+          hot: Math.random() < 0.38,
+          size: rand(2.4, 5.8),
+        });
+      }
+    }
 
     for (const field of state.currentFields) {
       field.x -= liveScrollSpeed * dt;
@@ -688,7 +791,6 @@
         const influence = 1 - d2;
         bird.vx += field.pushX * influence * dt * liveCurrentX;
         bird.vy += field.pushY * influence * dt * liveCurrentY;
-        bird.wingOpen = Math.min(1, bird.wingOpen + influence * 0.02);
       }
     }
 
@@ -709,18 +811,19 @@
       const pipe = state.pipes[i];
       pipe.x -= liveScrollSpeed * dt;
 
-      if (!pipe.passed && pipe.x + physics.pipeW < bird.x) {
+      const pipeW = pipe.w || physics.pipeW;
+      if (!pipe.passed && pipe.x + pipeW < bird.x) {
         pipe.passed = true;
         state.score += 1;
         scoreEl.textContent = String(state.score);
         playScoreSound();
       }
 
-      if (pipe.x + physics.pipeW < -20) {
+      if (pipe.x + pipeW < -20) {
         state.pipes.splice(i, 1);
       }
 
-      const withinX = bird.x + bird.r > pipe.x && bird.x - bird.r < pipe.x + physics.pipeW;
+      const withinX = bird.x + bird.r > pipe.x && bird.x - bird.r < pipe.x + pipeW;
       if (withinX) {
         const gapHalf = pipe.gap * 0.5;
         const hitTop = bird.y - bird.r < pipe.gapY - gapHalf;
@@ -732,13 +835,27 @@
       }
     }
 
+    for (let i = state.jetTrail.length - 1; i >= 0; i -= 1) {
+      const p = state.jetTrail[i];
+      p.age += dt;
+      if (p.age >= p.life) {
+        state.jetTrail.splice(i, 1);
+        continue;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.94;
+      p.vy *= 0.92;
+    }
+
     if (bird.y - bird.r < 0 || bird.y + bird.r > H - GROUND_H) {
       setGameOver();
     }
   }
 
   function drawPaintedPipe(pipe, isTop) {
-    const centerX = pipe.x + physics.pipeW * 0.5;
+    const pipeW = pipe.w || physics.pipeW;
+    const centerX = pipe.x + pipeW * 0.5;
     const gapHalf = pipe.gap * 0.5;
     const edge = isTop ? pipe.gapY - gapHalf : pipe.gapY + gapHalf;
 
@@ -748,44 +865,60 @@
       return;
     }
 
-    const baseY = isTop ? y : y + h;
-    const tipY = isTop ? y + h : y;
-    const halfW = physics.pipeW * 0.52;
+    const segments = Math.max(3, Math.floor(h / 70));
+    const segH = h / segments;
+    for (let i = 0; i < segments; i += 1) {
+      const jitter = (noise2D(centerX, i * 1.7 + state.time * 0.05, 0.4) - 0.5) * 12;
+      const blockY = y + i * segH;
+      const blockH = segH + (i === segments - 1 ? 0 : 2);
+      const inset = (Math.sin(i * 2.1 + pipe.hue) * 0.5 + 0.5) * 9;
 
-    const coneGrad = ctx.createLinearGradient(centerX, tipY, centerX, baseY);
-    coneGrad.addColorStop(0, "rgba(237, 248, 255, 0.96)");
-    coneGrad.addColorStop(1, "rgba(166, 203, 236, 0.88)");
+      const blockGrad = ctx.createLinearGradient(pipe.x, blockY, pipe.x + pipeW, blockY + blockH);
+      blockGrad.addColorStop(0, `rgba(233,245,255,${0.9 - pipe.frost * 0.22})`);
+      blockGrad.addColorStop(0.55, `rgba(184,216,245,${0.86 - pipe.frost * 0.18})`);
+      blockGrad.addColorStop(1, "rgba(143,190,228,0.9)");
 
-    ctx.beginPath();
-    ctx.moveTo(centerX - halfW, baseY);
-    ctx.lineTo(centerX, tipY);
-    ctx.lineTo(centerX + halfW, baseY);
-    ctx.closePath();
-    ctx.fillStyle = coneGrad;
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(111, 153, 193, 0.55)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    for (let i = 0; i < 6; i += 1) {
-      const t = (i + 1) / 7;
-      const ringY = baseY + (tipY - baseY) * t;
-      const ringW = halfW * (1 - t);
-      ctx.strokeStyle = `rgba(230, 245, 255, ${0.24 - t * 0.11})`;
       ctx.beginPath();
-      ctx.moveTo(centerX - ringW, ringY);
-      ctx.lineTo(centerX + ringW, ringY);
+      ctx.moveTo(pipe.x + inset * 0.35, blockY);
+      ctx.lineTo(pipe.x + pipeW - inset, blockY + jitter * 0.1);
+      ctx.lineTo(pipe.x + pipeW - inset * 0.45, blockY + blockH);
+      ctx.lineTo(pipe.x + inset, blockY + blockH - jitter * 0.1);
+      ctx.closePath();
+      ctx.fillStyle = blockGrad;
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(114, 160, 205, 0.45)";
+      ctx.lineWidth = 1.4;
       ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(pipe.x + inset + 4, blockY + blockH * 0.18);
+      ctx.lineTo(pipe.x + pipeW - inset - 7, blockY + blockH * 0.36);
+      ctx.lineTo(pipe.x + inset + 10, blockY + blockH * 0.74);
+      ctx.strokeStyle = "rgba(243, 251, 255, 0.3)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  function drawJetTrail() {
+    for (const p of state.jetTrail) {
+      const lifeRatio = 1 - p.age / p.life;
+      const alpha = lifeRatio * (p.hot ? 0.72 : 0.42);
+      ctx.fillStyle = p.hot
+        ? `rgba(255, ${Math.round(130 + 90 * lifeRatio)}, 62, ${alpha.toFixed(3)})`
+        : `rgba(255, 218, 168, ${(alpha * 0.8).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.size * lifeRatio + 1.1, p.size * 0.56 * lifeRatio + 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
   function drawBird() {
     const b = state.bird;
-    const wingSpread = 0.35 + b.wingOpen * 0.75 + Math.sin(state.time * 8.5) * 0.06 * b.wingPulse;
     ctx.save();
     ctx.translate(b.x, b.y);
-    ctx.rotate(b.rot);
+    ctx.rotate(b.rot + b.jetTilt * 0.36);
 
     for (let i = 0; i < 5; i += 1) {
       ctx.beginPath();
@@ -801,7 +934,7 @@
     ctx.fillRect(-4, -10, 8, 20);
     ctx.fillStyle = "rgba(64, 90, 124, 0.9)";
     ctx.fillRect(4, -8, 5, 16);
-    const flame = 9 + wingSpread * 16;
+    const flame = 13 + state.thrustBoost * 28;
     const flicker = Math.sin(state.time * 35) * 4;
     ctx.beginPath();
     ctx.moveTo(8, -2);
@@ -821,9 +954,9 @@
 
     ctx.save();
     ctx.translate(-2, -2);
-    ctx.rotate(-0.22 - wingSpread * 0.28);
+    ctx.rotate(-0.2 - state.thrustBoost * 0.18);
     ctx.beginPath();
-    ctx.ellipse(-8, 2, b.r * (0.72 + wingSpread * 0.24), b.r * (0.44 + wingSpread * 0.18), -0.4, 0, Math.PI * 2);
+    ctx.ellipse(-8, 2, b.r * 0.76, b.r * 0.5, -0.4, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(230, 133, 165, 0.62)";
     ctx.fill();
     ctx.restore();
@@ -1018,14 +1151,15 @@
       drawPaintedPipe(pipe, false);
     }
 
+    drawJetTrail();
     drawBird();
     drawGround();
     drawWatercolorPost();
 
     if (state.mode === "menu") {
-      const bob = Math.sin(state.time * 2.2) * 8;
-      state.bird.y = H * 0.42 + bob;
-      state.bird.rot = Math.sin(state.time * 1.9) * 0.08;
+      state.bird.y = H * 0.42;
+      state.bird.rot = 0;
+      state.bird.jetTilt *= 0.88;
     }
   }
 
@@ -1072,6 +1206,13 @@
   });
 
   canvas.addEventListener("pointerdown", onInteract, { passive: false });
+  canvas.addEventListener("pointerup", () => { state.thrustHeld = false; });
+  canvas.addEventListener("pointercancel", () => { state.thrustHeld = false; });
+  window.addEventListener("keyup", (ev) => {
+    if (ev.code === "Space" || ev.code === "ArrowUp") {
+      state.thrustHeld = false;
+    }
+  });
 
   function toggleFullscreen() {
     const root = document.querySelector(".game-wrap");
