@@ -14,25 +14,23 @@
   const bestScoreEl = document.getElementById("bestScore");
 
   function getWorldSize() {
-    const portrait = window.innerHeight > window.innerWidth;
-    const rawAspect = window.innerWidth > 0 ? window.innerHeight / window.innerWidth : 1;
+    const targetWidth = Math.max(canvas.clientWidth || 0, 1);
+    const targetHeight = Math.max(canvas.clientHeight || 0, 1);
+    const portrait = targetHeight > targetWidth;
+    const rawAspect = targetHeight / targetWidth;
 
     if (portrait) {
-      // Keep gameplay tuned for common tall mobile ratios while still scaling cleanly to larger displays.
-      const clampedAspect = Math.min(2.25, Math.max(1.6, rawAspect));
       const worldWidth = 720;
       return {
         width: worldWidth,
-        height: Math.round(worldWidth * clampedAspect),
+        height: Math.round(worldWidth * rawAspect),
       };
     }
 
-    // Landscape supports tablets/desktop through to 4K by preserving visible field width.
     const landscapeAspect = 1 / Math.max(rawAspect, 0.01);
-    const clampedAspect = Math.min(2.25, Math.max(1.45, landscapeAspect));
     const worldHeight = 720;
     return {
-      width: Math.round(worldHeight * clampedAspect),
+      width: Math.round(worldHeight * landscapeAspect),
       height: worldHeight,
     };
   }
@@ -40,7 +38,7 @@
   const initialWorld = getWorldSize();
   let W = initialWorld.width;
   let H = initialWorld.height;
-  let GROUND_H = Math.round(H * 0.14);
+  let GROUND_H = 0;
 
   const STORAGE_KEY = "jetpack_flamingo_best";
 
@@ -125,12 +123,12 @@
     const landscapeAspect = W / Math.max(H, 1);
 
     physics.flapImpulse = portraitWorld ? -360 : -346;
-    physics.scrollSpeed = portraitWorld ? 168 : 188;
-    physics.spawnEvery = portraitWorld ? 1.42 : 1.28;
+    physics.scrollSpeed = portraitWorld ? 162 : 182;
+    physics.spawnEvery = portraitWorld ? 1.7 : 1.5;
     physics.pipeGap = portraitWorld
       ? Math.round(H * Math.min(0.33, Math.max(0.29, 0.28 + (portraitAspect - 1.7) * 0.05)))
       : Math.round(H * Math.min(0.4, Math.max(0.34, 0.32 + (landscapeAspect - 1.45) * 0.02)));
-    physics.pipeW = portraitWorld ? 132 : 122;
+    physics.pipeW = portraitWorld ? 122 : 114;
     physics.pipeTopPadding = portraitWorld ? Math.round(H * 0.12) : Math.round(H * 0.14);
     physics.pipeBottomPadding = portraitWorld ? Math.round(H * 0.18) : Math.round(H * 0.16);
     physics.currentForceX = portraitWorld ? 120 : 210;
@@ -157,7 +155,7 @@
 
     W = nextW;
     H = nextH;
-    GROUND_H = Math.round(H * 0.14);
+    GROUND_H = 0;
     syncWorldTuning();
     rebuildPaintLayers();
 
@@ -700,30 +698,25 @@
     const difficulty = getDifficulty();
     const topLimit = physics.pipeTopPadding;
     const bottomLimit = H - GROUND_H - physics.pipeBottomPadding;
-    const dynamicGap = clamp(physics.pipeGap * (1 - difficulty * 0.2), 132, physics.pipeGap);
+    const dynamicGap = clamp(physics.pipeGap * (1 - difficulty * 0.14), 144, physics.pipeGap);
     const playableMin = topLimit + dynamicGap * 0.5;
     const playableMax = bottomLimit - dynamicGap * 0.5;
-    const middle = (playableMin + playableMax) * 0.5;
     let gapY = rand(playableMin, playableMax);
 
-    // Original Flappy Bird web behavior relied on largely independent pipe heights.
-    // This keeps abrupt jumps and occasionally forces a hard side switch.
-    if (typeof state.lastPipeGapY === "number" && Math.random() < 0.34) {
-      const previousWasUpper = state.lastPipeGapY < middle;
-      const switchMin = previousWasUpper ? middle : playableMin;
-      const switchMax = previousWasUpper ? playableMax : middle;
-      gapY = rand(switchMin, switchMax);
+    if (typeof state.lastPipeGapY === "number") {
+      const maxGapShift = dynamicGap * (0.26 - difficulty * 0.06) + H * 0.02;
+      gapY = clamp(gapY, state.lastPipeGapY - maxGapShift, state.lastPipeGapY + maxGapShift);
     }
 
     state.lastPipeGapY = gapY;
     state.pipeCount += 1;
 
-    const w = physics.pipeW * rand(0.92, 1.16);
+    const w = physics.pipeW * rand(0.94, 1.08);
     state.pipes.push({
       x: W + 40,
       w,
       gapY,
-      gap: dynamicGap * rand(0.94, 1.06),
+      gap: dynamicGap * rand(0.97, 1.04),
       passed: false,
       hue: rand(194, 220),
       frost: rand(0.28, 0.58),
@@ -746,7 +739,7 @@
     const liveScrollSpeed = physics.scrollSpeed * (1 + difficulty * 0.2);
     const liveCurrentX = physics.currentForceX * (1 + difficulty * 0.25);
     const liveCurrentY = physics.currentForceY * (1 + difficulty * 0.2);
-    const spawnEvery = physics.spawnEvery * (1 - difficulty * 0.2);
+    const spawnEvery = physics.spawnEvery * (1 - difficulty * 0.1);
 
     state.camX += liveScrollSpeed * dt;
 
