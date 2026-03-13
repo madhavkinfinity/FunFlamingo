@@ -92,6 +92,7 @@
   let audioCtx = null;
   let masterGain = null;
   let ambientNodes = null;
+  let pianoNodes = null;
 
   let watercolorLayer = createWatercolorLayer(W, H);
   let paperLayer = createPaperTexture(W, H);
@@ -285,7 +286,7 @@
     }
   }
 
-  function paintMountainRange(cctx, width, horizonY, peaks, palette, fogStrength) {
+  function paintMountainRange(cctx, width, height, horizonY, peaks, palette, fogStrength) {
     const profile = [];
     const step = width / peaks;
     let x = -step;
@@ -301,7 +302,7 @@
     }
 
     cctx.beginPath();
-    cctx.moveTo(-80, horizonY + palette.baseLift);
+    cctx.moveTo(-80, height + 40);
     for (let i = 0; i < profile.length - 1; i += 1) {
       const p = profile[i];
       const n = profile[i + 1];
@@ -309,10 +310,11 @@
       const cy = (p.y + n.y) * 0.5;
       cctx.quadraticCurveTo(p.x, p.y, cx, cy);
     }
-    cctx.lineTo(width + 80, horizonY + palette.baseLift);
+    cctx.lineTo(width + 80, height + 40);
+    cctx.lineTo(-80, height + 40);
     cctx.closePath();
 
-    const bodyGrad = cctx.createLinearGradient(0, horizonY - palette.height, 0, horizonY + palette.baseLift);
+    const bodyGrad = cctx.createLinearGradient(0, horizonY - palette.height, 0, height + 20);
     bodyGrad.addColorStop(0, palette.top);
     bodyGrad.addColorStop(0.6, palette.mid);
     bodyGrad.addColorStop(1, palette.base);
@@ -363,7 +365,7 @@
     }
 
     const horizonY = height * 0.64;
-    paintMountainRange(cctx, c.width, horizonY - height * 0.2, 16, {
+    paintMountainRange(cctx, c.width, height, horizonY - height * 0.2, 16, {
       height: height * 0.24,
       roughness: 18,
       baseLift: height * 0.18,
@@ -371,7 +373,7 @@
       mid: "rgba(151, 176, 208, 0.9)",
       base: "rgba(103, 130, 166, 0.95)",
     }, 0.32);
-    paintMountainRange(cctx, c.width, horizonY - height * 0.08, 22, {
+    paintMountainRange(cctx, c.width, height, horizonY - height * 0.08, 22, {
       height: height * 0.34,
       roughness: 26,
       baseLift: height * 0.24,
@@ -440,6 +442,7 @@
     masterGain.connect(audioCtx.destination);
 
     ambientNodes = createAmbientLoop(audioCtx, masterGain);
+    pianoNodes = createPianoLoop(audioCtx, masterGain);
   }
 
   function resumeAudio() {
@@ -491,6 +494,77 @@
     lfo.start();
 
     return { source, filter, gain, lfo, lfoGain };
+  }
+
+  function createPianoLoop(ctx, dest) {
+    const gain = ctx.createGain();
+    gain.gain.value = 0.08;
+    gain.connect(dest);
+
+    const progression = [
+      [261.63, 329.63, 392.0],
+      [293.66, 369.99, 440.0],
+      [220.0, 261.63, 329.63],
+      [246.94, 329.63, 392.0],
+    ];
+
+    const loopBars = 16;
+    const noteSpacing = 0.34;
+    const loopDuration = loopBars * noteSpacing;
+    let scheduledUntil = ctx.currentTime;
+
+    function triggerPianoNote(frequency, startAt, hold = 0.56) {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(frequency, startAt);
+
+      const tint = ctx.createOscillator();
+      tint.type = "sine";
+      tint.frequency.setValueAtTime(frequency * 2, startAt);
+
+      const voiceGain = ctx.createGain();
+      voiceGain.gain.setValueAtTime(0.0001, startAt);
+      voiceGain.gain.linearRampToValueAtTime(0.15, startAt + 0.02);
+      voiceGain.gain.exponentialRampToValueAtTime(0.08, startAt + 0.12);
+      voiceGain.gain.exponentialRampToValueAtTime(0.0001, startAt + hold);
+
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.setValueAtTime(1800, startAt);
+      lowpass.Q.value = 0.5;
+
+      osc.connect(lowpass);
+      tint.connect(lowpass);
+      lowpass.connect(voiceGain);
+      voiceGain.connect(gain);
+
+      osc.start(startAt);
+      tint.start(startAt);
+      osc.stop(startAt + hold + 0.05);
+      tint.stop(startAt + hold + 0.05);
+    }
+
+    function scheduleLoop() {
+      const now = ctx.currentTime;
+      while (scheduledUntil < now + 2.8) {
+        const loopPos = ((scheduledUntil % loopDuration) + loopDuration) % loopDuration;
+        const stepIndex = Math.floor(loopPos / noteSpacing) % loopBars;
+        const chord = progression[Math.floor(stepIndex / 4) % progression.length];
+        const note = chord[stepIndex % chord.length];
+        const octave = stepIndex % 8 < 4 ? 1 : 0.5;
+
+        triggerPianoNote(note * octave, scheduledUntil, 0.52);
+        if (stepIndex % 4 === 0) {
+          triggerPianoNote(chord[0] * 0.5, scheduledUntil + noteSpacing * 0.5, 0.65);
+        }
+
+        scheduledUntil += noteSpacing;
+      }
+    }
+
+    const schedulerId = setInterval(scheduleLoop, 240);
+    scheduleLoop();
+    return { gain, schedulerId };
   }
 
   function scheduleEnvelope(param, now, points) {
@@ -724,9 +798,30 @@
   }
 
   function getDifficulty() {
-    const fromScore = clamp(state.score / 38, 0, 1);
-    const fromTime = clamp(state.time / 85, 0, 1);
-    return clamp(fromScore * 0.72 + fromTime * 0.28, 0, 1);
+    const fromScore = clamp(state.score / 65, 0, 1);
+    const fromTime = clamp(state.time / 120, 0, 1);
+    const base = fromScore * 0.76 + fromTime * 0.24;
+
+    const stages = [
+      [0.16, 0.12],
+      [0.35, 0.3],
+      [0.56, 0.52],
+      [0.78, 0.74],
+      [1, 1],
+    ];
+
+    let previous = [0, 0];
+    for (const stage of stages) {
+      const [input, output] = stage;
+      if (base <= input) {
+        const blend = clamp((base - previous[0]) / Math.max(0.001, input - previous[0]), 0, 1);
+        const eased = blend * blend * (3 - 2 * blend);
+        return clamp(previous[1] + (output - previous[1]) * eased, 0, 1);
+      }
+      previous = stage;
+    }
+
+    return 1;
   }
 
   function update(dt) {
