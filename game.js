@@ -49,7 +49,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
 
   const physics = {
     gravity: 50,
-    flapImpulse: -18,
+    flapImpulse: 18,
     thrust: 38,
     pipeGap: 13,
     pipeW: 5,
@@ -95,6 +95,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
   const flameRoot = new THREE.Group();
   worldRoot.add(flameRoot);
 
+  const cameraTarget = new THREE.Vector3(6, 0, 0);
+
   function createCloudField() {
     const group = new THREE.Group();
     const cloudGeo = new THREE.SphereGeometry(1, 18, 18);
@@ -110,23 +112,50 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     return group;
   }
 
-  function createMountainLayer() {
+  function createMountainLayer(depth = -66, baseY = -17, hue = 0.58, saturation = 0.2, lightness = 0.62, alpha = 0.92) {
     const group = new THREE.Group();
-    const geo = new THREE.ConeGeometry(4.6, 12.5, 8, 1);
-    for (let i = 0; i < 70; i += 1) {
-      const peak = new THREE.Mesh(
-        geo,
-        new THREE.MeshStandardMaterial({
-          color: new THREE.Color().setHSL(0.58, 0.32, rand(0.56, 0.74)),
-          roughness: 0.84,
-          metalness: 0.04,
-        }),
-      );
-      peak.position.set(-90 + i * 5 + rand(-1.5, 1.5), -14 + rand(-1.1, 1.1), -66 + rand(-6, 6));
-      peak.rotation.y = rand(0, Math.PI);
-      peak.scale.set(rand(0.6, 1.55), rand(0.72, 2.1), rand(0.6, 1.55));
-      group.add(peak);
+    const mountainLength = 320;
+    const segments = 38;
+    const shape = new THREE.Shape();
+    shape.moveTo(-mountainLength * 0.5, -15);
+    for (let i = 0; i <= segments; i += 1) {
+      const t = i / segments;
+      const x = -mountainLength * 0.5 + t * mountainLength;
+      const ridge = Math.sin(t * Math.PI * 6.4 + rand(-0.14, 0.14)) * 1.2;
+      const peak = Math.sin(t * Math.PI * 2.1 + 0.7) * 4.2;
+      const y = baseY + Math.abs(Math.sin(t * Math.PI * 5.1)) * rand(6.8, 12.5) + ridge + peak;
+      shape.lineTo(x, y);
     }
+    shape.lineTo(mountainLength * 0.5, -15);
+    shape.lineTo(-mountainLength * 0.5, -15);
+
+    const mountain = new THREE.Mesh(
+      new THREE.ShapeGeometry(shape),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL(hue, saturation, lightness),
+        roughness: 0.86,
+        metalness: 0.02,
+        transparent: true,
+        opacity: alpha,
+      }),
+    );
+    mountain.position.set(40, 0, depth);
+    group.add(mountain);
+
+    const snow = new THREE.Mesh(
+      new THREE.ShapeGeometry(shape),
+      new THREE.MeshStandardMaterial({
+        color: 0xf6fbff,
+        roughness: 0.8,
+        metalness: 0.03,
+        transparent: true,
+        opacity: alpha * 0.35,
+      }),
+    );
+    snow.position.set(40, 1.2, depth + 0.2);
+    snow.scale.set(0.98, 0.83, 1);
+    group.add(snow);
+
     return group;
   }
 
@@ -150,7 +179,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
   }
 
   bgRoot.add(createCloudField());
-  bgRoot.add(createMountainLayer());
+  bgRoot.add(createMountainLayer(-70, -18, 0.58, 0.2, 0.62, 0.86));
+  bgRoot.add(createMountainLayer(-77, -20, 0.6, 0.16, 0.57, 0.62));
   bgRoot.add(createGround());
 
   function createFlamingoRig() {
@@ -170,6 +200,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     head.position.set(2.3, 1.05, 0);
     rig.add(head);
 
+    const crest = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 14), bodyMat);
+    crest.position.set(2.44, 1.64, 0);
+    crest.scale.set(1.25, 0.7, 1.15);
+    rig.add(crest);
+
     const neck = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.2, 16, 30, Math.PI * 0.8), bodyMat);
     neck.position.set(1.05, 0.76, 0);
     neck.rotation.set(0.4, -0.22, 0.06);
@@ -180,12 +215,27 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     beak.position.set(3.07, 0.95, 0);
     rig.add(beak);
 
+    const beakTip = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.32, 10), darkMat);
+    beakTip.rotation.z = -Math.PI / 2;
+    beakTip.position.set(3.58, 0.95, 0);
+    rig.add(beakTip);
+
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), darkMat);
     eye.position.set(2.62, 1.17, 0.43);
     rig.add(eye);
     const eye2 = eye.clone();
     eye2.position.z = -0.43;
     rig.add(eye2);
+
+    const pupilHighlight = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 6, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, metalness: 0.02 }),
+    );
+    pupilHighlight.position.set(2.68, 1.2, 0.47);
+    rig.add(pupilHighlight);
+    const pupilHighlight2 = pupilHighlight.clone();
+    pupilHighlight2.position.z = -0.47;
+    rig.add(pupilHighlight2);
 
     const wingGeo = new THREE.SphereGeometry(0.95, 20, 20);
     const wingL = new THREE.Mesh(wingGeo, bodyMat);
@@ -197,6 +247,29 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     wingR.position.z = -1.2;
     rig.add(wingR);
 
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.3, 12), accentMat);
+    tail.position.set(-2.06, -0.2, 0);
+    tail.rotation.set(0, 0, Math.PI * 0.74);
+    rig.add(tail);
+
+    const legGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.45, 10);
+    const legL = new THREE.Mesh(legGeo, darkMat);
+    legL.position.set(-0.25, -1.54, 0.45);
+    legL.rotation.z = 0.08;
+    rig.add(legL);
+    const legR = legL.clone();
+    legR.position.z = -0.45;
+    legR.rotation.z = -0.08;
+    rig.add(legR);
+
+    const footGeo = new THREE.BoxGeometry(0.42, 0.05, 0.22);
+    const footL = new THREE.Mesh(footGeo, darkMat);
+    footL.position.set(0, -2.23, 0.45);
+    rig.add(footL);
+    const footR = footL.clone();
+    footR.position.z = -0.45;
+    rig.add(footR);
+
     const jetBody = new THREE.Mesh(new THREE.BoxGeometry(0.58, 1.1, 0.8), jetMat);
     jetBody.position.set(-1.45, 0.0, 0);
     rig.add(jetBody);
@@ -205,6 +278,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     nozzle.rotation.z = Math.PI / 2;
     nozzle.position.set(-1.95, 0, 0);
     rig.add(nozzle);
+
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.05, 12), jetMat);
+    tank.position.set(-1.45, 0.58, 0);
+    tank.rotation.z = Math.PI / 2;
+    rig.add(tank);
 
     const flame = new THREE.Mesh(
       new THREE.ConeGeometry(0.16, 0.85, 10),
@@ -224,6 +302,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     const group = new THREE.Group();
     const material = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.57 + rand(-0.03, 0.03), 0.42, 0.68), roughness: 0.34, metalness: 0.18, transparent: true, opacity: 0.96 });
     const capMaterial = new THREE.MeshStandardMaterial({ color: 0xe8f9ff, emissive: 0x8fc7f8, emissiveIntensity: 0.22, roughness: 0.12, metalness: 0.52 });
+    const coreMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x9ecfff, emissiveIntensity: 0.12, roughness: 0.08, metalness: 0.15, transparent: true, opacity: 0.28 });
 
     const topH = world.height / 2 + pipe.gapY - pipe.gap / 2;
     const bottomH = world.height / 2 - pipe.gapY - pipe.gap / 2;
@@ -236,6 +315,14 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     bottom.position.set(0, -world.height / 2 + bottomH / 2, 0);
     group.add(bottom);
 
+    const topCore = new THREE.Mesh(new THREE.BoxGeometry(pipe.w * 0.62, Math.max(0.6, topH - 0.8), pipe.d * 0.58), coreMaterial);
+    topCore.position.copy(top.position);
+    group.add(topCore);
+
+    const bottomCore = topCore.clone();
+    bottomCore.position.copy(bottom.position);
+    group.add(bottomCore);
+
     const topCap = new THREE.Mesh(new THREE.CylinderGeometry(pipe.w * 0.6, pipe.w * 0.74, 0.85, 14), capMaterial);
     topCap.rotation.z = Math.PI / 2;
     topCap.position.set(0, pipe.gapY + pipe.gap * 0.5, 0);
@@ -244,6 +331,18 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     const bottomCap = topCap.clone();
     bottomCap.position.y = pipe.gapY - pipe.gap * 0.5;
     group.add(bottomCap);
+
+    const grooveGeo = new THREE.TorusGeometry(pipe.w * 0.36, 0.06, 8, 18);
+    for (let i = 0; i < 3; i += 1) {
+      const ring = new THREE.Mesh(grooveGeo, capMaterial);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, top.position.y - (i + 1) * Math.max(0.7, topH * 0.16), 0);
+      group.add(ring);
+
+      const ringB = ring.clone();
+      ringB.position.y = bottom.position.y + (i + 1) * Math.max(0.7, bottomH * 0.16);
+      group.add(ringB);
+    }
 
     pipe.mesh = group;
     pipeRoot.add(group);
@@ -262,6 +361,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     state.bird.rot = -0.08;
     state.thrustBoost = 0;
     state.thrustHeld = false;
+    camera.position.set(-12, 6.5, 30);
+    cameraTarget.set(6, 0, 0);
     scoreEl.textContent = "0";
     menu.classList.remove("visible");
     gameover.classList.remove("visible");
@@ -285,7 +386,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     if (state.mode !== "playing") {
       return;
     }
-    state.bird.vy = Math.min(state.bird.vy - physics.thrust * 0.25, physics.flapImpulse);
+    state.bird.vy = Math.max(state.bird.vy + physics.thrust * 0.25, physics.flapImpulse);
     state.thrustBoost = 1;
     state.thrustHeld = true;
   }
@@ -376,10 +477,10 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     }
 
     if (state.thrustBoost > 0) {
-      b.vy -= physics.thrust * state.thrustBoost * dt;
+      b.vy += physics.thrust * state.thrustBoost * dt;
     }
 
-    b.vy += physics.gravity * dt;
+    b.vy -= physics.gravity * dt;
     b.y += b.vy * dt;
     b.vx += (physics.birdX - b.x) * dt * 4.2;
     b.x += b.vx * dt;
@@ -446,11 +547,14 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
       p.mesh.position.set(p.x + p.w * 0.5, 0, 0);
     }
 
-    camera.position.x += ((b.x - 5) - camera.position.x) * dt * 1.8;
-    camera.position.y += ((b.y * 0.12 + 6.5) - camera.position.y) * dt * 2.2;
-    camera.lookAt(b.x + 14, b.y * 0.2, 0);
+    const targetCamX = b.x - 5.8;
+    const targetCamY = clamp(b.y * 0.24 + 6.2, 3.7, 9.4);
+    camera.position.x += (targetCamX - camera.position.x) * dt * 3.2;
+    camera.position.y += (targetCamY - camera.position.y) * dt * 4.2;
+    cameraTarget.set(b.x + 12.5, b.y * 0.35, 0);
+    camera.lookAt(cameraTarget);
 
-    bgRoot.position.x = -state.time * 0.7;
+    bgRoot.position.x = -((state.time * 0.7) % 160);
   }
 
   function render() {
