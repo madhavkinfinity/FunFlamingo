@@ -41,6 +41,7 @@
   let GROUND_H = 0;
 
   const STORAGE_KEY = "jetpack_flamingo_best";
+  const BIRD_RENDER_SCALE = 1.3;
 
   const state = {
     mode: "menu",
@@ -801,7 +802,11 @@
     state.camX += liveScrollSpeed * dt;
 
     const bird = state.bird;
-    state.thrustBoost = Math.max(0, state.thrustBoost - dt * (state.thrustHeld ? 1.35 : 2.35));
+    if (state.thrustHeld) {
+      state.thrustBoost = 1;
+    } else {
+      state.thrustBoost = Math.max(0, state.thrustBoost - dt * 2.35);
+    }
     bird.jetTilt += ((state.thrustBoost > 0.02 ? -0.34 : 0.1) - bird.jetTilt) * 0.16;
     bird.vx += (physics.birdBaseX - bird.x) * dt * 6.5;
     if (state.thrustBoost > 0) {
@@ -873,11 +878,12 @@
         state.pipes.splice(i, 1);
       }
 
-      const withinX = bird.x + bird.r > pipe.x && bird.x - bird.r < pipe.x + pipeW;
+      const hitRadius = bird.r * BIRD_RENDER_SCALE;
+      const withinX = bird.x + hitRadius > pipe.x && bird.x - hitRadius < pipe.x + pipeW;
       if (withinX) {
         const gapHalf = pipe.gap * 0.5;
-        const hitTop = bird.y - bird.r < pipe.gapY - gapHalf;
-        const hitBottom = bird.y + bird.r > pipe.gapY + gapHalf;
+        const hitTop = bird.y - hitRadius < pipe.gapY - gapHalf;
+        const hitBottom = bird.y + hitRadius > pipe.gapY + gapHalf;
         if (hitTop || hitBottom) {
           setGameOver();
           return;
@@ -898,7 +904,8 @@
       p.vy *= 0.92;
     }
 
-    if (bird.y - bird.r < 0 || bird.y + bird.r > H - GROUND_H) {
+    const hitRadius = bird.r * BIRD_RENDER_SCALE;
+    if (bird.y - hitRadius < 0 || bird.y + hitRadius > H - GROUND_H) {
       setGameOver();
     }
   }
@@ -969,6 +976,7 @@
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.rot + b.jetTilt * 0.36);
+    ctx.scale(BIRD_RENDER_SCALE, BIRD_RENDER_SCALE);
 
     for (let i = 0; i < 5; i += 1) {
       ctx.beginPath();
@@ -1210,8 +1218,8 @@
   });
 
   canvas.addEventListener("pointerdown", onInteract, { passive: false });
-  canvas.addEventListener("pointerup", () => { state.thrustHeld = false; });
-  canvas.addEventListener("pointercancel", () => { state.thrustHeld = false; });
+  window.addEventListener("pointerup", () => { state.thrustHeld = false; });
+  window.addEventListener("pointercancel", () => { state.thrustHeld = false; });
   window.addEventListener("keyup", (ev) => {
     if (ev.code === "Space" || ev.code === "ArrowUp") {
       state.thrustHeld = false;
