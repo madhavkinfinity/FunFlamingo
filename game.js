@@ -25,9 +25,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#cfe8ff");
 
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
-  camera.position.set(-12, 6.5, 30);
-  camera.lookAt(6, 0, 0);
+  const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 2000);
+  camera.position.set(-20, 5.6, 38);
+  camera.lookAt(3.2, 0, 0);
 
   const hemi = new THREE.HemisphereLight(0xeaf7ff, 0xb8d3f4, 1.08);
   scene.add(hemi);
@@ -48,13 +48,13 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
   };
 
   const physics = {
-    gravity: 50,
-    flapImpulse: 18,
-    thrust: 38,
+    gravity: 42,
+    flapImpulse: 15.5,
+    thrust: 31,
     pipeGap: 13,
     pipeW: 5,
-    scrollSpeed: 24,
-    spawnEvery: 1.55,
+    scrollSpeed: 17.5,
+    spawnEvery: 1.9,
     birdX: -14,
     birdMinX: -16,
     birdMaxX: -8,
@@ -361,8 +361,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
     state.bird.rot = -0.08;
     state.thrustBoost = 0;
     state.thrustHeld = false;
-    camera.position.set(-12, 6.5, 30);
-    cameraTarget.set(6, 0, 0);
+    camera.position.set(-20, 5.6, 38);
+    cameraTarget.set(3.2, 0, 0);
     scoreEl.textContent = "0";
     menu.classList.remove("visible");
     gameover.classList.remove("visible");
@@ -462,7 +462,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
       return;
     }
 
-    const liveSpeed = physics.scrollSpeed * (1 + clamp(state.score / 70, 0, 0.35));
+    const liveSpeed = physics.scrollSpeed * (1 + clamp(state.score / 120, 0, 0.12));
     state.pipeTimer += dt;
     if (state.pipeTimer >= physics.spawnEvery) {
       state.pipeTimer = 0;
@@ -547,11 +547,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
       p.mesh.position.set(p.x + p.w * 0.5, 0, 0);
     }
 
-    const targetCamX = b.x - 5.8;
-    const targetCamY = clamp(b.y * 0.24 + 6.2, 3.7, 9.4);
-    camera.position.x += (targetCamX - camera.position.x) * dt * 3.2;
-    camera.position.y += (targetCamY - camera.position.y) * dt * 4.2;
-    cameraTarget.set(b.x + 12.5, b.y * 0.35, 0);
+    const targetCamX = b.x - 10.8;
+    const targetCamY = clamp(b.y * 0.2 + 5.6, 3.3, 8.3);
+    camera.position.x += (targetCamX - camera.position.x) * dt * 2.8;
+    camera.position.y += (targetCamY - camera.position.y) * dt * 3.6;
+    cameraTarget.set(b.x + 8.2, b.y * 0.28, 0);
     camera.lookAt(cameraTarget);
 
     bgRoot.position.x = -((state.time * 0.7) % 160);
