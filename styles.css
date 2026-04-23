@@ -139,6 +139,19 @@ body:has(.game-wrap:-webkit-full-screen) .hud-top {
   pointer-events: all;
 }
 
+.gameover-overlay {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(232, 234, 255, 0.28), transparent 45%),
+    radial-gradient(circle at 82% 70%, rgba(118, 134, 193, 0.2), transparent 48%),
+    linear-gradient(155deg, rgba(39, 53, 91, 0.8), rgba(18, 24, 44, 0.9));
+  color: #edf2ff;
+}
+
+.gameover-message {
+  font-style: italic;
+  opacity: 0.9;
+}
+
 .splash {
   background:
     radial-gradient(circle at 20% 16%, rgba(240, 249, 255, 0.78), transparent 42%),
