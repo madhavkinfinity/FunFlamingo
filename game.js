@@ -650,22 +650,49 @@
       return;
     }
     const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(420, now);
-    osc.frequency.exponentialRampToValueAtTime(140, now + 0.52);
+    const tones = [
+      { frequency: 240, type: "triangle", gain: 0.022, release: 1.1 },
+      { frequency: 196, type: "sine", gain: 0.018, release: 1.2 },
+      { frequency: 146.83, type: "triangle", gain: 0.02, release: 1.26 },
+    ];
 
-    const gain = audioCtx.createGain();
-    scheduleEnvelope(gain.gain, now, [
+    for (const tone of tones) {
+      const osc = audioCtx.createOscillator();
+      osc.type = tone.type;
+      osc.frequency.setValueAtTime(tone.frequency, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(44, tone.frequency * 0.36), now + tone.release);
+
+      const gain = audioCtx.createGain();
+      scheduleEnvelope(gain.gain, now, [
+        [0.0001, 0],
+        [tone.gain, 0.05],
+        [0.0001, tone.release],
+      ]);
+
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start(now);
+      osc.stop(now + tone.release + 0.02);
+    }
+
+    const hush = audioCtx.createBufferSource();
+    hush.buffer = createNoiseBuffer(audioCtx, 0.8);
+    const hushFilter = audioCtx.createBiquadFilter();
+    hushFilter.type = "lowpass";
+    hushFilter.frequency.setValueAtTime(520, now);
+    hushFilter.Q.setValueAtTime(1.5, now);
+    const hushGain = audioCtx.createGain();
+    scheduleEnvelope(hushGain.gain, now, [
       [0.0001, 0],
-      [0.15, 0.03],
-      [0.0001, 0.56],
+      [0.01, 0.08],
+      [0.0001, 0.75],
     ]);
 
-    osc.connect(gain);
-    gain.connect(masterGain);
-    osc.start(now);
-    osc.stop(now + 0.58);
+    hush.connect(hushFilter);
+    hushFilter.connect(hushGain);
+    hushGain.connect(masterGain);
+    hush.start(now);
+    hush.stop(now + 0.8);
   }
 
   function resetGame() {
@@ -697,7 +724,6 @@
     splash.classList.remove("visible");
     resumeAudio();
     resetGame();
-    flap();
   }
 
   function setGameOver() {
@@ -1199,7 +1225,6 @@
 
   startBtn.addEventListener("click", () => {
     resetGame();
-    flap();
   });
 
   restartBtn.addEventListener("click", () => {
