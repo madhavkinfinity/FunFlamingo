@@ -1300,6 +1300,7 @@
     const activeElement = fullscreenApi.element();
     const fullscreenActive = Boolean(activeElement || immersiveFallback);
     document.body.classList.toggle("fullscreen-active", fullscreenActive);
+    resizeCanvas();
 
     if (!fullscreenBtn) {
       return;
